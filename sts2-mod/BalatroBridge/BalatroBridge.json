@@ -1,0 +1,11 @@
+{
+  "id": "BalatroBridge",
+  "name": "Balatro the Spire",
+  "author": "Balatro the Spire",
+  "description": "Plays Balatro inside Slay the Spire 2. Adds Jimbo, a fifth character whose whole run is a Balatro run, and Deal In, a colorless attack that plays a hand of Balatro for everyone else.",
+  "version": "0.3.0",
+  "has_dll": true,
+  "has_pck": true,
+  "affects_gameplay": true,
+  "min_game_version": "0.111.0"
+}

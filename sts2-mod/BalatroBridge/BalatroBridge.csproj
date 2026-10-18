@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>BalatroBridge</AssemblyName>
+    <RootNamespace>BalatroBridge</RootNamespace>
+    <Version>0.2.0</Version>
+    <!-- The game loads <manifest id>.dll; nothing else needs to ship. -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <DebugType>embedded</DebugType>
+
+    <!-- Game install to compile against. Override with -p:Sts2Dir=... (tools/deploy_sts2_mod.ps1 does). -->
+    <Sts2Dir Condition="'$(Sts2Dir)' == ''">$(MSBuildThisFileDirectory)..\..\games\Slay the Spire 2</Sts2Dir>
+    <Sts2Data>$(Sts2Dir)\data_sts2_windows_x86_64</Sts2Data>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="sts2" HintPath="$(Sts2Data)\sts2.dll" Private="false" />
+    <Reference Include="GodotSharp" HintPath="$(Sts2Data)\GodotSharp.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(Sts2Data)\0Harmony.dll" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="BalatroBridge.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,834 @@
+-- Jimbo: Slay the Spire 2's Balatro character plays a whole Balatro run through this module.
+--
+-- StS2 walks the map and Balatro walks its run in step: every fight is a blind, every shop node
+-- is Balatro's shop, and Balatro decides everything about cards, jokers, money and consumables.
+-- Nothing here moves the run on by itself; StS2 asks for each step (see protocol/PROTOCOL.md):
+--
+--   jimbo_link      (one-way) names the StS2 run, its deck, stake and seed
+--   jimbo_new_run   -> a fresh Balatro run for the StS2 run, once it is at the first blind select
+--   jimbo_state     -> the run as it stands, once Balatro is somewhere stable
+--   jimbo_blind     -> selects the blind on deck and deals the fight's first hand
+--   jimbo_turn      -> a new StS2 turn: the turn's hands and discards
+--   jimbo_win       -> StS2 won the fight: Balatro beats the blind and adds up the cash-out
+--   jimbo_cash_out  -> cashes out into the shop
+--   jimbo_buy, jimbo_sell, jimbo_use, jimbo_pick, jimbo_skip_pack, jimbo_highlight,
+--   jimbo_move_joker, jimbo_dollars, jimbo_deck, jimbo_catalog
+--
+-- In a fight (a "Jimbo blind") Balatro's own round rules give way to StS2's turns:
+--   * Each turn has a share of the blind's hands and discards: the blind's hands minus 3 and its
+--     discards minus 2, so 1 and 1 at the start, more with decks, vouchers and jokers that add them.
+--   * Running out of hands, or scoring past the blind, doesn't end the round: the hand is refilled
+--     and play waits for the next turn. Only StS2 ends a fight (jimbo_win).
+--   * When the deck runs dry, the discard pile is shuffled back into it, as StS2's draw pile is.
+
+local cards = require('bridge.cards')
+local dealer = require('bridge.dealer')
+
+local jimbo = {}
+
+local REQUEST_TIMEOUT = 30 -- a step that hasn't happened by now has gone wrong
+
+local send, log
+local now = dealer.now
+
+local requests = {} -- FIFO: { id, label, since, step }; step() returns nil (wait) or reply_type, data
+local unlocked_all
+local cashing      -- { rows, total }: the cash-out being added up after a won fight
+
+-- The fight in progress, kept in the run itself so it survives Balatro restarting mid-fight:
+-- { per_turn = { hands, discards }, reshuffles }. Nil between fights.
+local function fight()
+    return G.GAME and G.GAME.jimbo_fight
+end
+
+local function in_combat()
+    return fight() ~= nil
+end
+
+-- Names Balatro's current state for StS2.
+local function state_name()
+    local s = G.STATE
+    if s == G.STATES.SELECTING_HAND or s == G.STATES.HAND_PLAYED or s == G.STATES.DRAW_TO_HAND then return 'hand' end
+    if s == G.STATES.SHOP then return 'shop' end
+    if s == G.STATES.BLIND_SELECT then return 'blind_select' end
+    if s == G.STATES.ROUND_EVAL or s == G.STATES.NEW_ROUND then return 'round_eval' end
+    if dealer.in_pack() then return 'pack' end
+    if s == G.STATES.GAME_OVER then return 'game_over' end
+    return 'other'
+end
+
+-- The open pack's cards (nil while a pack is being opened or put away).
+local function pack_cards()
+    return dealer.in_pack() and G.pack_cards and G.pack_cards.cards or nil
+end
+
+-- True when Balatro has stopped somewhere StS2 can show.
+local function stable()
+    if not dealer.in_linked_run() or dealer.is_playing() then return false end
+    local s = G.STATE
+    if s == G.STATES.SELECTING_HAND then return dealer.hand_settled() end
+    if s == G.STATES.SHOP then return dealer.shop_settled() end
+    if s == G.STATES.BLIND_SELECT then return dealer.select_blind_button() ~= nil and dealer.events_idle() end
+    if s == G.STATES.ROUND_EVAL then return dealer.cash_out_button() ~= nil end
+    if dealer.in_pack() then return pack_cards() ~= nil and #pack_cards() > 0 and dealer.events_idle() end
+    return false
+end
+
+-- Snapshot -----------------------------------------------------------------------------------
+
+local function pack_info(used)
+    if not pack_cards() then return nil end
+    local list = {}
+    for i, card in ipairs(pack_cards()) do
+        list[i] = cards.card_info(card, used, true)
+        if card.ability.consumeable then list[i].usable = cards.usable(card, true) end
+    end
+    local kind
+    for _, name in ipairs({ 'TAROT_PACK', 'PLANET_PACK', 'SPECTRAL_PACK', 'STANDARD_PACK', 'BUFFOON_PACK' }) do
+        if G.STATE == G.STATES[name] then kind = string.lower(name:gsub('_PACK', '')) end
+    end
+    return { kind = kind, choices = G.GAME.pack_choices or 1, cards = list }
+end
+
+-- A pick from a pack that dealt a hand: { card, before, after, used } until a reply carries it.
+local pack_effect
+
+local function hand_infos(used)
+    local list = {}
+    for i, card in ipairs(G.hand and G.hand.cards or {}) do list[i] = cards.card_info(card, used, true) end
+    return list
+end
+
+local function extend_snapshot(snap, used)
+    if not dealer.jimbo_mode() then return end
+    local game = G.GAME
+    snap.state = state_name()
+    local consumables = {}
+    for i, card in ipairs(G.consumeables.cards) do
+        consumables[i] = cards.card_info(card, used, true)
+        consumables[i].usable = cards.usable(card)
+    end
+    snap.consumables = consumables
+    snap.consumable_slots = G.consumeables.config.card_limit
+    snap.joker_slots = G.jokers.config.card_limit
+    snap.hand_size = G.hand.config.card_limit
+    local vouchers = {}
+    for key, owned in pairs(game.used_vouchers or {}) do
+        if owned then vouchers[#vouchers + 1] = key end
+    end
+    table.sort(vouchers)
+    snap.vouchers = vouchers
+    local back = game.selected_back and game.selected_back.effect and game.selected_back.effect.center
+    snap.deck_key = back and back.key
+    snap.stake = game.stake
+    snap.per_turn = fight() and fight().per_turn or nil
+    snap.in_fight = in_combat()
+    snap.discard_left = #G.discard.cards
+    snap.pack = pack_info(used)
+    snap.won_run = game.won or nil
+    snap.interest = { amount = game.interest_amount, cap = game.interest_cap, off = game.modifiers.no_interest or nil }
+    if snap.state ~= 'hand' then snap.next_blind = dealer.next_blind_info(used) end
+    local tags = {}
+    for i, tag in ipairs(game.tags or {}) do tags[i] = { key = tag.key, name = tag.name } end
+    snap.tags = tags
+    -- The road ahead, for Jimbo's map: this ante's three blinds (its Boss Blind is already
+    -- chosen) and every ante's base chips.
+    local antes = {}
+    for ante = 1, 8 do antes[ante] = get_blind_amount(ante) * game.starting_params.ante_scaling end
+    if pack_effect and pack_effect.after then
+        for atlas in pairs(pack_effect.used) do used[atlas] = true end
+        snap.pack_effect = { card = pack_effect.card, before = pack_effect.before, after = pack_effect.after }
+        pack_effect = nil
+    end
+    snap.road = {
+        ante = game.round_resets.ante,
+        small = dealer.blind_choice('Small', used),
+        big = dealer.blind_choice('Big', used),
+        boss = dealer.blind_choice('Boss', used),
+        antes = antes,
+    }
+end
+
+-- Requests -----------------------------------------------------------------------------------
+
+-- Queues a step for request `msg`: `step` runs every frame until it returns the reply.
+local function pend(msg, label, step, timeout)
+    requests[#requests + 1] = { id = msg.id, label = label, since = now(), step = step, timeout = timeout or REQUEST_TIMEOUT }
+end
+
+local function reply_state()
+    return 'jimbo', dealer.snapshot()
+end
+
+-- Balatro's isolated profile knows nothing yet; a Jimbo run gets every joker, deck and voucher.
+local function unlock_everything()
+    if unlocked_all or love.filesystem.getIdentity() ~= 'BalatroBridge' then return end
+    unlocked_all = true
+    for _, group in ipairs({ G.P_CENTERS, G.P_BLINDS, G.P_TAGS }) do
+        for _, v in pairs(group) do
+            if not v.demo and not v.wip then
+                v.unlocked, v.discovered, v.alerted = true, true, true
+            end
+        end
+    end
+end
+
+local function link_from(data)
+    data.mode = 'jimbo'
+    dealer.take_link(data)
+    unlock_everything()
+end
+
+local function find_card(area, id)
+    for _, card in ipairs(area and area.cards or {}) do
+        if card.sort_id == tonumber(id) then return card end
+    end
+    return nil
+end
+
+local function affordable(card)
+    return card.cost <= 0 or card.cost <= G.GAME.dollars - G.GAME.bankrupt_at
+end
+
+-- Handlers -----------------------------------------------------------------------------------
+
+local function on_link(data, msg)
+    link_from(data)
+    if msg.id then send('ack', {}, msg.id) end
+end
+
+local function on_state(data, msg)
+    link_from(data)
+    pend(msg, 'state', function()
+        if stable() then return reply_state() end
+    end)
+end
+
+-- A fresh Balatro run for the StS2 run: Jimbo has just picked his deck at the Dealer.
+local function on_new_run(data, msg)
+    link_from(data)
+    local started = false
+    pend(msg, 'new run', function()
+        if not started then
+            started = dealer.switch_run(true)
+            return nil
+        end
+        if dealer.in_linked_run() and G.STATE == G.STATES.BLIND_SELECT and stable() then return reply_state() end
+    end)
+end
+
+-- Moves Balatro on to the blind select screen (out of a round summary, shop or pack).
+local function toward_blind_select()
+    if G.STATE == G.STATES.ROUND_EVAL then
+        local cash_out = dealer.cash_out_button()
+        if cash_out then dealer.press(G.FUNCS.cash_out, cash_out) end
+    elseif G.STATE == G.STATES.SHOP and dealer.shop_settled() then
+        local next_round = dealer.button(G.shop, 'next_round_button')
+        if next_round then dealer.press(G.FUNCS.toggle_shop, next_round) end
+    elseif dealer.in_pack() and G.booster_pack and dealer.events_idle() then
+        dealer.press(function() G.FUNCS.skip_booster() end, G.booster_pack)
+    end
+end
+
+-- Status cards: what an enemy shuffles into Jimbo's StS2 piles (Wound, Burn, Slimed...) joins
+-- his Balatro deck for the fight as a dud, a Stone Card that's always debuffed: it never scores
+-- and takes up room in hand. StS2 keeps the card's own rules (what it does at the end of a turn);
+-- Balatro only holds it. Duds with Exhaust are gone once discarded or played, and every dud
+-- leaves when the fight does.
+
+local function is_dud(card) return card and card.ability and card.ability.jimbo_dud ~= nil end
+
+local function each_dud(fn)
+    for i = #(G.playing_cards or {}), 1, -1 do
+        local card = G.playing_cards[i]
+        if is_dud(card) then fn(card) end
+    end
+end
+
+local function remove_dud(card)
+    card:start_dissolve(nil, true)
+    card:remove()
+end
+
+-- Duds with Exhaust that were discarded or played don't come back.
+local function exhaust_duds()
+    for i = #G.discard.cards, 1, -1 do
+        local card = G.discard.cards[i]
+        if is_dud(card) and card.ability.jimbo_dud.exhaust then remove_dud(card) end
+    end
+end
+
+local function purge_duds()
+    each_dud(remove_dud)
+end
+
+local DUD_PILES = { hand = 'hand', discard = 'discard', draw = 'deck' }
+
+local function add_dud(spec)
+    local area = G[DUD_PILES[spec.pile] or 'deck']
+    local card = create_playing_card({ front = pseudorandom_element(G.P_CARDS, pseudoseed('jimbo_dud')), center = G.P_CENTERS.m_stone }, area, true, true)
+    card.ability.jimbo_dud = { ref = spec.ref, name = tostring(spec.name or 'Status'), text = spec.text, exhaust = spec.exhaust and true or nil }
+    card:set_debuff(true)
+    if area == G.deck then
+        -- Shuffled in somewhere, as StS2 shuffles a status into the draw pile.
+        local list, last = G.deck.cards, #G.deck.cards
+        local at = pseudorandom('jimbo_dud_at', 1, last)
+        list[at], list[last] = list[last], list[at]
+    end
+end
+
+-- StS2 added status cards to Jimbo's piles (add), or one burned away at the end of his turn (remove).
+local function on_duds(data, msg)
+    link_from(data)
+    local done = false
+    pend(msg, 'status cards', function()
+        if not done then
+            if not (fight() and stable()) then return nil end
+            done = true
+            for _, spec in ipairs(data.add or {}) do add_dud(spec) end
+            local gone = {}
+            for _, ref in ipairs(data.remove or {}) do gone[ref] = true end
+            each_dud(function(card) if gone[card.ability.jimbo_dud.ref] then remove_dud(card) end end)
+            return nil
+        end
+        if stable() and dealer.events_idle() then return reply_state() end
+    end)
+end
+
+-- The share of the blind's hands and discards each turn gets.
+local function share_of(hands, discards)
+    return { hands = math.max(1, hands - 3), discards = math.max(0, discards - 2) }
+end
+
+local function start_turn()
+    local round = G.GAME.current_round
+    round.hands_left = fight().per_turn.hands
+    round.discards_left = fight().per_turn.discards
+end
+
+-- The fight begins: Balatro plays the blind on deck (StS2 names the kind it expects).
+local function on_blind(data, msg)
+    link_from(data)
+    local selected = false
+    pend(msg, 'blind', function()
+        if not dealer.in_linked_run() then return nil end
+        local s = G.STATE
+        if not selected then
+            if s == G.STATES.SELECTING_HAND or s == G.STATES.HAND_PLAYED or s == G.STATES.DRAW_TO_HAND then
+                -- Already in this blind (StS2 restarted the fight after a reload): carry on with it.
+                selected = true
+                G.GAME.jimbo_fight = fight() or { per_turn = share_of(G.GAME.round_resets.hands, G.GAME.round_resets.discards) }
+            elseif s == G.STATES.BLIND_SELECT then
+                local select = dealer.select_blind_button()
+                if not select or not dealer.events_idle() then return nil end
+                if data.kind and data.kind ~= G.GAME.blind_on_deck then
+                    log('StS2 expected the ' .. tostring(data.kind) .. ' blind but Balatro is on the ' .. tostring(G.GAME.blind_on_deck))
+                end
+                G.GAME.jimbo_fight = { reshuffles = 0 }
+                purge_duds() -- strays from a fight that never finished
+                dealer.press(G.FUNCS.select_blind, select)
+                selected = true
+            else
+                toward_blind_select()
+            end
+            return nil
+        end
+        if not dealer.hand_settled() then return nil end
+        if not fight().per_turn then
+            -- What the blind gave the round (decks, vouchers, jokers like Burglar) is shared out per turn.
+            fight().per_turn = share_of(G.GAME.current_round.hands_left, G.GAME.current_round.discards_left)
+        end
+        start_turn()
+        return reply_state()
+    end)
+end
+
+-- A new StS2 turn: the hand is topped up and the turn's hands and discards come in.
+local function on_turn(data, msg)
+    link_from(data)
+    local refilling = false
+    exhaust_duds()
+    pend(msg, 'turn', function()
+        if not (fight() and fight().per_turn) then error('no fight is on', 0) end
+        if not dealer.hand_settled() then return nil end
+        if not refilling and #G.hand.cards < G.hand.config.card_limit and (#G.deck.cards > 0 or #G.discard.cards > 0) then
+            refilling = true
+            G.STATE = G.STATES.DRAW_TO_HAND
+            G.STATE_COMPLETE = false
+            return nil
+        end
+        start_turn()
+        return reply_state()
+    end)
+end
+
+-- StS2 won the fight: the blind is beaten. Replies with the cash-out, once Balatro has added it up.
+local function on_win(data, msg)
+    link_from(data)
+    local ended = false
+    pend(msg, 'win', function()
+        if not dealer.in_linked_run() then return nil end
+        if G.STATE == G.STATES.SHOP and dealer.shop_settled() then
+            -- Already cashed out (StS2 asked again after a reload).
+            G.GAME.jimbo_fight = nil
+            return 'jimbo_cash_out', { rows = {}, total = 0, table = dealer.snapshot() }
+        end
+        if not ended then
+            if G.STATE == G.STATES.ROUND_EVAL then
+                ended = true
+            elseif G.STATE == G.STATES.SELECTING_HAND and not dealer.is_playing() and dealer.events_idle() then
+                purge_duds()
+                G.GAME.jimbo_fight = nil
+                cashing = { rows = {}, total = 0 }
+                G.GAME.chips = math.max(G.GAME.chips, G.GAME.blind.chips)
+                G.STATE = G.STATES.NEW_ROUND
+                G.STATE_COMPLETE = false
+                ended = true
+            end
+            return nil
+        end
+        if G.STATE ~= G.STATES.ROUND_EVAL or not dealer.cash_out_button() then return nil end
+        local rows = cashing and cashing.rows or {}
+        local total = cashing and cashing.total or G.GAME.current_round.dollars
+        cashing = nil
+        return 'jimbo_cash_out', { rows = rows, total = total, table = dealer.snapshot() }
+    end)
+end
+
+local function on_cash_out(data, msg)
+    link_from(data)
+    pend(msg, 'cash out', function()
+        if G.STATE == G.STATES.ROUND_EVAL then
+            local cash_out = dealer.cash_out_button()
+            if cash_out then dealer.press(G.FUNCS.cash_out, cash_out) end
+            return nil
+        end
+        if G.STATE == G.STATES.SHOP and dealer.shop_settled() then return reply_state() end
+    end)
+end
+
+-- Waits for Balatro to finish what a button started, then replies with the run. Balatro moves
+-- money and cards in queued events (a purchase's price comes off after the card moves), so this
+-- waits for the queue to empty too, for at most SETTLE_EVENTS seconds from the request.
+local SETTLE_EVENTS = 3
+local function settle(msg, label, done)
+    local since = now()
+    pend(msg, label, function()
+        if (done == nil or done()) and stable() and (dealer.events_idle() or now() - since >= SETTLE_EVENTS) then
+            return reply_state()
+        end
+    end)
+end
+
+local function on_buy(data, msg)
+    link_from(data)
+    dealer.require_shop()
+    local card = find_card(G.shop_jokers, data.card)
+    local area = 'cards'
+    if not card then card, area = find_card(G.shop_vouchers, data.card), 'voucher' end
+    if not card then card, area = find_card(G.shop_booster, data.card), 'booster' end
+    if not card then error('that card is no longer for sale', 0) end
+    if not affordable(card) then error('not enough money', 0) end
+    local e = { config = { ref_table = card, id = data.use and 'buy_and_use' or 'buy_button' } }
+    if area == 'cards' then
+        if data.use then
+            if not card.ability.consumeable or not cards.usable(card, true) then error('that card can\'t be used now', 0) end
+        elseif not G.FUNCS.check_for_buy_space(card) then
+            error(card.ability.consumeable and 'no room for another consumable' or 'no room for another joker', 0)
+        end
+        G.FUNCS.buy_from_shop(e)
+    else
+        -- Vouchers are redeemed and packs opened as they're bought; both take their own price.
+        G.FUNCS.use_card(e)
+    end
+    settle(msg, 'buy', function() return card.area ~= G.shop_jokers and card.area ~= G.shop_vouchers and card.area ~= G.shop_booster end)
+end
+
+local function on_sell(data, msg)
+    link_from(data)
+    local card = find_card(G.jokers, data.card) or find_card(G.consumeables, data.card)
+    if not card then error('that card is gone', 0) end
+    if not card:can_sell_card() then error(card.ability.eternal and 'eternal cards can\'t be sold' or 'that can\'t be sold right now', 0) end
+    G.FUNCS.sell_card({ config = { ref_table = card } })
+    settle(msg, 'sell', function() return card.area ~= G.jokers and card.area ~= G.consumeables end)
+end
+
+local function select_in_hand(ids)
+    local selection, asked = dealer.cards_by_id(ids)
+    if #selection ~= asked then error('some of those cards are no longer in hand', 0) end
+    dealer.highlight(selection)
+end
+
+local function on_use(data, msg)
+    link_from(data)
+    local card = find_card(G.consumeables, data.card)
+    if not card then error('that card is gone', 0) end
+    if G.STATE == G.STATES.SELECTING_HAND then select_in_hand(data.cards) end
+    if not cards.usable(card) then error('that can\'t be used right now', 0) end
+    G.FUNCS.use_card({ config = { ref_table = card } })
+    settle(msg, 'use', function() return card.area ~= G.consumeables and G.STATE ~= G.STATES.PLAY_TAROT end)
+end
+
+local function on_pick(data, msg)
+    link_from(data)
+    if not pack_cards() then error('no pack is open', 0) end
+    local card = find_card(G.pack_cards, data.card)
+    if not card then error('that card is gone', 0) end
+    if G.hand and #G.hand.cards > 0 then select_in_hand(data.cards) end
+    if card.ability.consumeable then
+        if not cards.usable(card, true) then error('that can\'t be used on those cards', 0) end
+    elseif card.ability.set == 'Joker' and not G.FUNCS.check_for_buy_space(card) then
+        error('no room for another joker', 0)
+    end
+    -- A tarot or spectral used on the cards the pack dealt: the reply shows them before and after
+    -- (taken just before the pack closes and they go back to the deck), so StS2 can show the effect.
+    local watch = card.ability.consumeable and G.hand and #G.hand.cards > 0
+    if watch then
+        pack_effect = { used = {} }
+        pack_effect.card = cards.card_info(card, pack_effect.used, true)
+        pack_effect.before = hand_infos(pack_effect.used)
+    end
+    G.FUNCS.use_card({ config = { ref_table = card } })
+    settle(msg, 'pick', function()
+        if card.area == G.pack_cards then return false end
+        -- A pack with more to choose stays open: its hand is the after.
+        if watch and pack_effect and not pack_effect.after and dealer.in_pack() and stable() and dealer.events_idle() then
+            pack_effect.after = hand_infos(pack_effect.used)
+        end
+        return true
+    end)
+end
+
+local function on_skip_pack(data, msg)
+    link_from(data)
+    if not dealer.in_pack() then error('no pack is open', 0) end
+    G.FUNCS.skip_booster()
+    settle(msg, 'skip pack', function() return not dealer.in_pack() end)
+end
+
+-- Skips the next blind for its tag, as Balatro's blind select would: Balatro leaves the shop
+-- (StS2 shows the skip there) and skips the Small or Big Blind on deck. A tag that opens a pack
+-- opens it now. Jimbo still gets the next shop (see on_open_shop).
+local function on_skip(data, msg)
+    link_from(data)
+    local skipped = false
+    pend(msg, 'skip', function()
+        if not skipped then
+            if G.STATE == G.STATES.SHOP then
+                local next_round = dealer.button(G.shop, 'next_round_button')
+                if next_round and dealer.shop_settled() then dealer.press(G.FUNCS.toggle_shop, next_round) end
+                return nil
+            end
+            if G.STATE ~= G.STATES.BLIND_SELECT or not dealer.select_blind_button() or not dealer.events_idle() then return nil end
+            local on_deck = G.GAME.blind_on_deck
+            if on_deck ~= 'Small' and on_deck ~= 'Big' then error("a boss blind can't be skipped", 0) end
+            G.FUNCS.skip_blind({ UIBox = G.blind_select_opts[string.lower(on_deck)] })
+            G.GAME.jimbo_owes_shop = true
+            skipped = true
+            return nil
+        end
+        if stable() then return reply_state() end
+    end)
+end
+
+-- Opens the shop that a skipped blind didn't pay for: in Jimbo's runs the shop between blinds is
+-- always open. Otherwise replies with the run as it is.
+local function on_open_shop(data, msg)
+    link_from(data)
+    pend(msg, 'shop', function()
+        if G.STATE == G.STATES.BLIND_SELECT and G.GAME.jimbo_owes_shop and G.blind_select and dealer.events_idle() then
+            G.GAME.jimbo_owes_shop = nil
+            G.blind_select:remove()
+            G.blind_select = nil
+            if G.blind_prompt_box then
+                G.blind_prompt_box:remove()
+                G.blind_prompt_box = nil
+            end
+            G.STATE = G.STATES.SHOP
+            G.STATE_COMPLETE = false
+            return nil
+        end
+        if stable() and not (G.STATE == G.STATES.BLIND_SELECT and G.GAME.jimbo_owes_shop) then return reply_state() end
+    end)
+end
+
+-- Selects cards in hand (for a tarot, say): replies with the poker hand and what's usable now.
+local function on_highlight(data, msg)
+    link_from(data)
+    -- Waits its turn: changing the selection while a tarot is still working on it (they work
+    -- on the selected cards over a second or two) would pull cards out from under it.
+    pend(msg, 'highlight', function()
+        if not stable() or not dealer.events_idle() then return nil end
+        local selection = dealer.cards_by_id(data.cards)
+        dealer.highlight(selection)
+        local usable = {}
+        for _, card in ipairs(G.consumeables.cards) do
+            if cards.usable(card) then usable[#usable + 1] = card.sort_id end
+        end
+        local pack_usable = {}
+        for _, card in ipairs(G.pack_cards and G.pack_cards.cards or {}) do
+            if card.ability.consumeable and cards.usable(card, true) then pack_usable[#pack_usable + 1] = card.sort_id end
+        end
+        return 'jimbo_highlight', { preview = dealer.preview(selection), usable = usable, pack_usable = pack_usable }
+    end)
+end
+
+local function on_move_joker(data, msg)
+    link_from(data)
+    local card = find_card(G.jokers, data.card)
+    if not card then error('that joker is gone', 0) end
+    local to = math.max(1, math.min(#G.jokers.cards, tonumber(data.to) or 1))
+    for i, c in ipairs(G.jokers.cards) do
+        if c == card then table.remove(G.jokers.cards, i) break end
+    end
+    table.insert(G.jokers.cards, to, card)
+    G.jokers:set_ranks()
+    send('jimbo', dealer.snapshot(), msg.id)
+end
+
+-- StS2 took or gave money (a thief, say): Balatro's dollars follow.
+local function on_dollars(data, msg)
+    link_from(data)
+    local delta = tonumber(data.delta) or 0
+    if delta ~= 0 then ease_dollars(delta, true) end
+    if msg.id then send('ack', { dollars = G.GAME.dollars }, msg.id) end
+end
+
+-- Every playing card in the run, for StS2's deck view.
+local function on_deck(data, msg)
+    link_from(data)
+    local used = {}
+    local list = {}
+    local where = {}
+    for _, c in ipairs(G.hand.cards) do where[c] = 'hand' end
+    for _, c in ipairs(G.discard.cards) do where[c] = 'discard' end
+    for _, c in ipairs(G.play.cards) do where[c] = 'play' end
+    for _, card in ipairs(G.playing_cards) do
+        local info = cards.card_info(card, used, true)
+        info.facing = 'front'
+        info.debuff = nil
+        info.pile = where[card] or 'deck'
+        list[#list + 1] = info
+    end
+    send('jimbo_deck', { cards = list, atlases = cards.atlases(used), texture_scale = G.SETTINGS.GRAPHICS.texture_scaling }, msg.id)
+end
+
+-- What the Dealer can offer: vouchers Balatro's shop could stock next (requirements met, none
+-- owned), or legendary jokers not yet owned. Seeded, so a reload offers the same.
+local function on_offers(data, msg)
+    link_from(data)
+    pend(msg, 'offers', function()
+        if not stable() then return nil end
+        local candidates = {}
+        if data.kind == 'voucher' then
+            for _, key in ipairs(get_current_pool('Voucher')) do
+                if key ~= 'UNAVAILABLE' then candidates[#candidates + 1] = key end
+            end
+        elseif data.kind == 'legendary' then
+            local owned = {}
+            for _, card in ipairs(G.jokers.cards) do owned[card.config.center.key] = true end
+            for _, center in ipairs(G.P_CENTER_POOLS.Joker) do
+                if center.rarity == 4 and not owned[center.key] then candidates[#candidates + 1] = center.key end
+            end
+        end
+        table.sort(candidates)
+        local picks = {}
+        local seed = 'dealer_' .. tostring(data.kind) .. G.GAME.round_resets.ante
+        for _ = 1, math.min(tonumber(data.count) or 3, #candidates) do
+            local key, i = pseudorandom_element(candidates, pseudoseed(seed))
+            picks[#picks + 1] = key
+            table.remove(candidates, i)
+        end
+        return 'jimbo_offers', { keys = picks }
+    end)
+end
+
+-- A gift (the Dealer's): a voucher redeemed, a booster pack opened on the spot, or a joker or
+-- consumable created, free.
+local function on_grant(data, msg)
+    link_from(data)
+    local center = G.P_CENTERS[tostring(data.key)]
+    if not center then error('no such card: ' .. tostring(data.key), 0) end
+    local granted = false
+    pend(msg, 'gift', function()
+        if not stable() then return nil end
+        if not granted then
+            granted = true
+            if center.set == 'Voucher' then
+                G.GAME.used_vouchers[center.key] = true
+                Card.apply_to_run(nil, center)
+            elseif center.set == 'Booster' then
+                -- Opened as a tag opens one.
+                local card = Card(G.play.T.x + G.play.T.w / 2 - G.CARD_W * 1.27 / 2, G.play.T.y + G.play.T.h / 2 - G.CARD_H * 1.27 / 2,
+                    G.CARD_W * 1.27, G.CARD_H * 1.27, G.P_CARDS.empty, center, { bypass_discovery_center = true, bypass_discovery_ui = true })
+                card.cost = 0
+                card.from_tag = true
+                G.FUNCS.use_card({ config = { ref_table = card } })
+                card:start_materialize()
+            else
+                local area = center.set == 'Joker' and G.jokers or G.consumeables
+                local card = create_card(center.set, area, nil, nil, nil, nil, center.key, 'dealer')
+                card:add_to_deck()
+                area:emplace(card)
+            end
+            return nil
+        end
+        if center.set == 'Booster' and not dealer.in_pack() then return nil end
+        if stable() then return reply_state() end
+    end)
+end
+
+local function on_catalog(_, msg)
+    local was = unlocked_all
+    local items = cards.catalog()
+    unlocked_all = was
+    send('jimbo_catalog', { items = items, version = G.VERSION }, msg.id)
+end
+
+-- Balatro rules for Jimbo's fights --------------------------------------------------------------
+
+local function reshuffle()
+    exhaust_duds()
+    if #G.discard.cards == 0 then return end
+    for i = #G.discard.cards, 1, -1 do
+        local card = G.discard:remove_card(G.discard.cards[i])
+        if card then
+            card.ability.discarded = nil
+            G.deck:emplace(card)
+        end
+    end
+    local f = fight()
+    f.reshuffles = (f.reshuffles or 0) + 1
+    G.deck:shuffle('jimbo_reshuffle' .. G.GAME.round_resets.ante .. '_' .. f.reshuffles)
+end
+
+-- A Jimbo fight never ends by itself: whatever Balatro thinks of the score, it keeps dealing.
+local function end_round_override()
+    if not in_combat() then return false end
+    if G.STATE == G.STATES.NEW_ROUND then
+        G.STATE = G.STATES.DRAW_TO_HAND
+        G.STATE_COMPLETE = false
+    elseif G.STATE == G.STATES.SELECTING_HAND and #G.hand.cards == 0 and #G.discard.cards > 0 then
+        -- Everything was played or thrown away: shuffle the discards back in and deal again.
+        G.STATE = G.STATES.DRAW_TO_HAND
+        G.STATE_COMPLETE = false
+    end
+    return true
+end
+
+local function install_rules()
+    dealer.end_round_override = end_round_override
+    dealer.in_combat = in_combat
+
+    -- The pack is closing: the cards a tarot just changed are about to go back to the deck.
+    local end_consumeable = G.FUNCS.end_consumeable
+    G.FUNCS.end_consumeable = function(e, delayfac)
+        if pack_effect and pack_effect.before and not pack_effect.after then
+            pack_effect.after = hand_infos(pack_effect.used)
+        end
+        return end_consumeable(e, delayfac)
+    end
+
+    -- Duds stay debuffed whatever the blind recalculates.
+    local set_debuff = Card.set_debuff
+    function Card:set_debuff(should_debuff)
+        if is_dud(self) then should_debuff = true end
+        return set_debuff(self, should_debuff)
+    end
+
+    local draw = G.FUNCS.draw_from_deck_to_hand
+    G.FUNCS.draw_from_deck_to_hand = function(e)
+        if in_combat() and not e and G.hand then
+            local space = G.hand.config.card_limit - #G.hand.cards
+            if #G.deck.cards < space then reshuffle() end
+        end
+        return draw(e)
+    end
+
+    -- The cash-out's lines, as Balatro adds them to its round summary.
+    local add_row = add_round_eval_row
+    add_round_eval_row = function(config)
+        if cashing and config then
+            if config.name == 'bottom' then
+                cashing.total = config.dollars or 0
+            else
+                local label
+                if config.name == 'blind1' then
+                    label = cards.loc({ type = 'name_text', set = 'Blind', key = G.GAME.blind.config.blind.key }) or 'Blind'
+                elseif config.name == 'hands' then
+                    label = tostring(config.disp) .. ' ' .. (cards.loc('k_hands_left') or 'hands left')
+                elseif config.name == 'discards' then
+                    label = tostring(config.disp) .. ' ' .. (cards.loc('k_discards_left') or 'discards left')
+                elseif config.name == 'interest' then
+                    label = cards.loc({ type = 'variable', key = 'interest', vars = { G.GAME.interest_amount, 5, G.GAME.interest_amount * G.GAME.interest_cap / 5 } }) or 'Interest'
+                elseif config.card then
+                    label = cards.name(config.card.config.center)
+                elseif config.tag then
+                    label = config.tag.name
+                end
+                cashing.rows[#cashing.rows + 1] = { name = config.name, label = label or config.name, dollars = config.dollars or 0 }
+            end
+        end
+        return add_row(config)
+    end
+end
+
+-- Install and update -----------------------------------------------------------------------
+
+function jimbo.install(bridge)
+    send = bridge.send
+    log = bridge.log
+    local h = bridge.handlers
+    h.jimbo_link = on_link
+    h.jimbo_state = on_state
+    h.jimbo_new_run = on_new_run
+    h.jimbo_blind = on_blind
+    h.jimbo_turn = on_turn
+    h.jimbo_win = on_win
+    h.jimbo_cash_out = on_cash_out
+    h.jimbo_buy = on_buy
+    h.jimbo_sell = on_sell
+    h.jimbo_use = on_use
+    h.jimbo_pick = on_pick
+    h.jimbo_skip_pack = on_skip_pack
+    h.jimbo_highlight = on_highlight
+    h.jimbo_move_joker = on_move_joker
+    h.jimbo_dollars = on_dollars
+    h.jimbo_deck = on_deck
+    h.jimbo_catalog = on_catalog
+    h.jimbo_offers = on_offers
+    h.jimbo_grant = on_grant
+    h.jimbo_skip = on_skip
+    h.jimbo_open_shop = on_open_shop
+    h.jimbo_duds = on_duds
+    dealer.extend_snapshot = extend_snapshot
+    dealer.jimbo_update = jimbo.update
+    dealer.jimbo_waiting = function() return #requests > 0 end
+    install_rules()
+end
+
+function jimbo.reset()
+    requests = {}
+end
+
+-- Runs the oldest waiting request's step, and times out ones that never get there.
+function jimbo.update()
+    local r = requests[1]
+    if not r then return end
+    local ok, kind, data = pcall(r.step)
+    if not ok then
+        table.remove(requests, 1)
+        log('jimbo ' .. r.label .. ' failed: ' .. tostring(kind))
+        send('error', { message = tostring(kind) }, r.id)
+    elseif kind then
+        table.remove(requests, 1)
+        send(kind, data, r.id)
+    elseif now() - r.since > r.timeout then
+        table.remove(requests, 1)
+        dealer.describe_situation(r.id, r.since)
+        dealer.rescue_stalled_link(r.id)
+        send('error', { message = 'Balatro never got to the ' .. r.label }, r.id)
+    end
+end
+
+return jimbo
