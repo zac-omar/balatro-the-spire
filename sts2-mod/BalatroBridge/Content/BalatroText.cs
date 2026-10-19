@@ -18,7 +18,7 @@ internal static class BalatroText
         string text = (relic.IsMutable ? relic.LiveText : null) ?? BalatroCatalog.Text(relic.BalatroKey) ?? Fallback(relic.Item);
         if (relic is StakeRelic) text = StakeText(relic.BalatroKey, text);
         // Jimbo's jokers can be sold from the relic bar (JimboRelicBar).
-        if (relic is JokerRelic { IsMutable: true } joker && Jimbo.JimboRun.IsJimbo(joker.Owner)) text += "\n[color=#9aa0a6]Right-click to sell.[/color]";
+        if (relic is JokerRelic { IsMutable: true } joker && Jimbo.JimboRun.IsJimbo(joker.Owner)) text += "\n[color=#9aa0a6]Right-click to sell or move.[/color]";
         return text;
     }
 
@@ -28,7 +28,8 @@ internal static class BalatroText
         string stake = key == "stake_white" ? "No handicaps. Higher Ascensions play harder stakes." : balatro;
         return stake + "\n\n[gold]Enemy HP[/gold] is the blind's score." +
                "\n[blue]Play[/blue]: each scoring card strikes. [red]Hearts[/red] heal, [orange]Diamonds[/orange] Block, [blue]Clubs[/blue] Weak, [purple]Spades[/purple] Vulnerable." +
-               "\n[red]Discard[/red]: Block equal to the cards' chips.";
+               "\n[red]Discard[/red]: Block equal to the cards' chips (with no discards, played cards give it)." +
+               "\n[red]Overtime[/red]: once the blind's hands are spent, enemies gain more Strength every turn.";
     }
 
     public static string For(ConsumablePotion potion)

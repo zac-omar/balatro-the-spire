@@ -59,6 +59,7 @@ internal sealed class JimboHand
 
     private readonly TextureRect _blindChip;
     private readonly Label _blindName;
+    private readonly Label _turn;
     private readonly RichTextLabel _blindText;
     private readonly Label _blindGoal;
     private readonly Label _hands;
@@ -179,6 +180,8 @@ internal sealed class JimboHand
         info.AddChild(_money);
         _ante = TableStyle.Text("", 19, StsColors.cream, new Rect2(266, 172, 128, 26), TableStyle.Regular, 5);
         info.AddChild(_ante);
+        _turn = TableStyle.Text("", 19, new Color(StsColors.cream, 0.8f), new Rect2(266, 196, 128, 26), TableStyle.Regular, 5);
+        info.AddChild(_turn);
         _deck = TableStyle.Text("", 19, new Color(StsColors.cream, 0.8f), new Rect2(14, 222, 190, 30), TableStyle.Regular, 5);
         _deck.HorizontalAlignment = HorizontalAlignment.Left;
         info.AddChild(_deck);
@@ -591,6 +594,20 @@ internal sealed class JimboHand
     }
 
     /// <summary>The discarded cards' chips, shown as the Block they became.</summary>
+    /// <summary>The turn against the blind's hands ("Turn 2/4"), or overtime once they're spent.</summary>
+    public void ShowTurn(int turn, int limit)
+    {
+        if (limit <= 0)
+        {
+            _turn.Text = "";
+            return;
+        }
+        bool over = turn > limit;
+        _turn.Text = over ? "Overtime!" : $"Turn {turn}/{limit}";
+        _turn.LabelSettings.FontColor = over ? StsColors.red : new Color(StsColors.cream, 0.8f);
+        if (over) TableFx.Juice(_turn, 0.2f);
+    }
+
     public void ShowBlock(double chips)
     {
         if (_removed) return;

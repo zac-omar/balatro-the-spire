@@ -13,8 +13,9 @@ using MegaCrit.Sts2.Core.Nodes.Relics;
 namespace BalatroBridge.Jimbo;
 
 /// <summary>
-/// Jimbo's jokers can be sold from the relic bar, as Balatro lets you sell a joker at any time
-/// (some boss blinds want one sold mid-fight): right-click a joker relic, then Sell.
+/// Jimbo's jokers can be sold or moved from the relic bar, as Balatro lets you sell or rearrange
+/// jokers at any time (some boss blinds want one sold mid-fight, and jokers score left to right):
+/// right-click a joker relic, then Sell, or move it with the arrows.
 /// </summary>
 internal static class JimboRelicBar
 {
@@ -75,8 +76,12 @@ internal static class JimboRelicBar
         Button keep = TableStyle.Button("Keep", new Color(0.32f, 0.36f, 0.42f), new Rect2(0, 0, 100, 46), 20);
         keep.CustomMinimumSize = new Vector2(100, 46);
         keep.Pressed += Close;
+        int slot = JimboRun.Last!.Jokers.ToList().FindIndex(j => j.Id == joker.CardId) + 1;
+        int count = JimboRun.Last.Jokers.Count;
+        row.AddChild(MoveButton("<", slot > 1, () => TaskHelper.RunSafely(Move(player, joker, slot - 1))));
         row.AddChild(sell);
         row.AddChild(keep);
+        row.AddChild(MoveButton(">", slot < count, () => TaskHelper.RunSafely(Move(player, joker, slot + 1))));
         column.AddChild(row);
         panel.AddChild(column);
         _prompt.AddChild(panel);
@@ -84,6 +89,36 @@ internal static class JimboRelicBar
         panel.Size = panel.GetCombinedMinimumSize();
         Vector2 at = anchor.GetGlobalTransformWithCanvas() * new Vector2(0, anchor.Size.Y + 8);
         panel.Position = new Vector2(Math.Clamp(at.X, 8, screen.X - panel.Size.X - 8), Math.Clamp(at.Y, 8, screen.Y - panel.Size.Y - 8));
+    }
+
+    private static Button MoveButton(string label, bool enabled, Action pressed)
+    {
+        Button button = TableStyle.Button(label, new Color(0.32f, 0.36f, 0.42f), new Rect2(0, 0, 46, 46), 24);
+        button.CustomMinimumSize = new Vector2(46, 46);
+        button.Disabled = !enabled;
+        button.Pressed += () =>
+        {
+            Close();
+            pressed();
+        };
+        return button;
+    }
+
+    // Moves the joker to slot `to` (1-based); the relic bar follows, and the prompt comes back to move it again.
+    private static async Task Move(Player player, JokerRelic joker, int to)
+    {
+        try
+        {
+            TableSnapshot table = await JimboRun.Session().JimboMoveJoker(JimboRun.LinkFor(player), joker.CardId, to);
+            TableFx.Sound("cardSlide1", 1f, 0.7f);
+            await JimboRun.Apply(player, table);
+            NRelicInventory? inventory = NRun.Instance?.GlobalUi.RelicInventory;
+            if (inventory?.RelicNodes.FirstOrDefault(h => h.Relic?.Model == joker) is NRelicInventoryHolder holder) Prompt(holder, joker);
+        }
+        catch (Exception e)
+        {
+            BridgeMod.LogError($"jimbo: moving {joker.BalatroKey} failed: {e.Message}");
+        }
     }
 
     private static async Task Sell(Player player, JokerRelic joker)

@@ -10,6 +10,8 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.Relics;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace BalatroBridge.Jimbo;
@@ -134,6 +136,33 @@ internal static class JimboRun
             relic.LiveText = card.Text;
             relic.Status = card.Debuffed ? RelicStatus.Disabled : RelicStatus.Normal;
         }
+        OrderJokers(player, table);
+    }
+
+    private static readonly AccessTools.FieldRef<Player, List<RelicModel>> RelicList = AccessTools.FieldRefAccess<Player, List<RelicModel>>("_relics");
+    private static readonly AccessTools.FieldRef<NRelicInventory, List<NRelicInventoryHolder>> BarNodes =
+        AccessTools.FieldRefAccess<NRelicInventory, List<NRelicInventoryHolder>>("_relicNodes");
+
+    // Jokers score left to right, so the relic bar shows them in Balatro's order: the joker relics
+    // keep their places among the other relics, and which joker sits in each follows Balatro.
+    private static void OrderJokers(Player player, TableSnapshot table)
+    {
+        List<RelicModel> relics = RelicList(player);
+        List<int> order = table.Jokers.Select(j => j.Id).ToList();
+        List<int> slots = Enumerable.Range(0, relics.Count).Where(i => relics[i] is JokerRelic).ToList();
+        List<RelicModel> jokers = slots.Select(i => relics[i])
+            .OrderBy(r => order.IndexOf(((JokerRelic)r).CardId) is int at && at >= 0 ? at : int.MaxValue).ToList();
+        if (slots.Select(i => relics[i]).SequenceEqual(jokers)) return;
+        for (int k = 0; k < slots.Count; k++) relics[slots[k]] = jokers[k];
+
+        if (NRun.Instance?.GlobalUi.RelicInventory is not NRelicInventory bar || !Godot.GodotObject.IsInstanceValid(bar)) return;
+        List<NRelicInventoryHolder> nodes = BarNodes(bar);
+        var byRelic = nodes.Where(n => n.Relic?.Model != null).ToDictionary(n => n.Relic.Model);
+        List<NRelicInventoryHolder> sorted = relics.Where(byRelic.ContainsKey).Select(r => byRelic[r]).ToList();
+        if (sorted.Count != nodes.Count) return;
+        nodes.Clear();
+        nodes.AddRange(sorted);
+        for (int i = 0; i < sorted.Count; i++) bar.MoveChild(sorted[i], i);
     }
 
     // Vouchers and the deck: one relic per key.

@@ -27,6 +27,7 @@ internal static class JimboQuips
         Status,
         OnFire,
         Inferno,
+        Overtime,
         Discard,
         Victory,
         ShopEnter,
@@ -46,6 +47,8 @@ internal static class JimboQuips
             "Now we're cooking!", "Is it hot in here, or is it me?"], 1f),
         [Moment.Inferno] = (["Somebody call the fire department!", "Five-alarm fire!", "Stand back! WAY back!", "Hottest hand in the house!",
             "It's a bonfire, baby!", "The whole table's on fire!"], 1f),
+        [Moment.Overtime] = (["We're in overtime!", "Time's up, pal!", "The house is getting impatient...", "Uh oh. They're getting angry.",
+            "Gotta close this out!", "Running out of hands here!"], 1f),
         [Moment.Discard] = (["Not these.", "Next!", "Back in the deck with you.", "Safety first!", "Fold 'em."], 0.2f),
         [Moment.Victory] = (["Cash me out!", "Easy money!", "Pay up!", "Blind beaten!", "And that's the round!"], 0.6f),
         [Moment.ShopEnter] = (["Ooh, shiny!", "What's on sale?", "Window shopping!", "Money, money, money!", "Let's go shopping!"], 0.5f),
@@ -110,7 +113,7 @@ internal static class JimboQuips
         }
         (string[] lines, float chance) = Quips[moment];
         if (GD.Randf() > chance || !player.Creature.IsAlive || (!CombatManager.Instance.IsInProgress && moment != Moment.Victory)) return;
-        bool always = moment is Moment.Boss or Moment.LowHp or Moment.OnFire or Moment.Inferno;
+        bool always = moment is Moment.Boss or Moment.LowHp or Moment.OnFire or Moment.Inferno or Moment.Overtime;
         if (!always && _lastSaid != 0 && Time.GetTicksMsec() - _lastSaid < Cooldown) return;
         // A Boss Blind gets its own line when Jimbo has one for it.
         if (moment == Moment.Boss && bossKey != null && BossLines.TryGetValue(bossKey, out string? line))

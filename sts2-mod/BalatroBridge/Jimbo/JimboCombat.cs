@@ -47,6 +47,9 @@ internal static class JimboCombat
     private const decimal ClubWeak = 1m;
     private const decimal SpadeVulnerable = 1m;
 
+    // Overtime: each turn past the blind's hands, the enemies gain this much more Strength than the last.
+    private const int OvertimeStrength = 3;
+
     private static decimal _hpScale = 1;
     private static bool _begun;
     private static bool _saidLowHp;
@@ -155,8 +158,8 @@ internal static class JimboCombat
         Hand?.ListenForClicks([creature]);
     }
 
-    /// <summary>A new turn: this turn's hands and discards.</summary>
-    public static async Task TurnStart(Player player)
+    /// <summary>A new turn: this turn's hands and discards (and, past the blind's hands, overtime).</summary>
+    public static async Task TurnStart(Player player, PlayerChoiceContext choiceContext)
     {
         if (!_begun) return;
         try
@@ -169,6 +172,7 @@ internal static class JimboCombat
                 if (hand.Target is not { IsAlive: true }) hand.SetTarget(FirstEnemy(player));
                 hand.SetInputEnabled(true);
             }
+            if (await Overtime(player, table, choiceContext)) return;
             if (_greeting is JimboQuips.Moment greeting)
             {
                 _greeting = null;
@@ -185,6 +189,30 @@ internal static class JimboCombat
             BridgeMod.LogError($"jimbo: the turn didn't start in Balatro: {e}");
             Hand?.SetStatus("Balatro isn't answering...", StsColors.red);
         }
+    }
+
+    /// <summary>
+    /// Overtime, Balatro's hand limit in StS2's terms: a blind gives its hands and no more. Once
+    /// Jimbo's turns have used them all, the enemies gain Strength every turn, more each time (3,
+    /// then 6, then 9...), so a blind he can't keep pace with gets him in the end instead of
+    /// dragging on. Returns whether the turn is in overtime (it has its own word from Jimbo).
+    /// </summary>
+    private static async Task<bool> Overtime(Player player, TableSnapshot table, PlayerChoiceContext choiceContext)
+    {
+        int turn = player.PlayerCombatState?.TurnNumber ?? 1;
+        int limit = table.PerTurn?.Turns ?? 0;
+        Hand?.ShowTurn(turn, limit);
+        int over = turn - limit;
+        if (limit <= 0 || over <= 0 || player.Creature.CombatState is not CombatState state) return false;
+        int strength = OvertimeStrength * over;
+        foreach (Creature enemy in state.Enemies.Where(e => e.IsAlive).ToList())
+        {
+            await PowerCmd.Apply<StrengthPower>(choiceContext, enemy, strength, null, null);
+        }
+        TableFx.Sound(over == 1 ? "gong" : "timpani", 1f, 0.6f);
+        Hand?.SetStatus($"Overtime! The blind's hands are spent: enemies +{strength} Strength", StsColors.red);
+        JimboQuips.Maybe(player, JimboQuips.Moment.Overtime);
+        return true;
     }
 
     private static Creature? FirstEnemy(Player player) =>
@@ -257,6 +285,16 @@ internal static class JimboCombat
             // Then the scoring cards' suits take effect, so a hand's damage is its score.
             await SuitRiders(player, target is { IsAlive: true } ? target : FirstEnemy(player),
                 strikers.Select(id => inHand.GetValueOrDefault(id)).OfType<TableCard>().ToList(), choiceContext);
+            // A fight with no discards (The Water, higher stakes): the played cards give the Block a discard would.
+            if (JimboRun.Last?.PerTurn is { Discards: 0 } && CombatManager.Instance.IsInProgress)
+            {
+                double chips = scored.Played.Sum(id => inHand.GetValueOrDefault(id)?.Chips ?? 0);
+                if (chips > 0)
+                {
+                    hand?.ShowBlock(chips);
+                    await CreatureCmd.GainBlock(player.Creature, (decimal)chips, ValueProp.Move, null);
+                }
+            }
             if (hand != null) await hand.ClearPlay();
             if (fire > 0) JimboFire.Douse(player);
             // A hand that took a big bite out of the blind deserves a word (a blaze already got one).
@@ -388,10 +426,18 @@ internal static class JimboCombat
         }
     }
 
+    /// <summary>
+    /// Between a won fight and collecting its cash-out, the map stays shut (see
+    /// <see cref="BalatroBridge.Content.StakeRelic"/>): StS2 opens travel the moment a fight ends,
+    /// while Balatro is still adding up the round, and an early click would skip the shop.
+    /// </summary>
+    public static bool CashingOut { get; private set; }
+
     /// <summary>The fight is won: the blind is beaten.</summary>
     public static async Task Won(Player player, CombatRoom room)
     {
         _begun = false;
+        CashingOut = true;
         JimboFire.Douse(player);
         JimboQuips.Maybe(player, JimboQuips.Moment.Victory);
         JimboMusic.SetTrack(BalatroAudio.Track.Main);
@@ -420,6 +466,11 @@ internal static class JimboCombat
         catch (Exception e)
         {
             BridgeMod.LogError($"jimbo: cashing out failed: {e}");
+        }
+        finally
+        {
+            CashingOut = false;
+            MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.SetTravelEnabled(true);
         }
         // As StS2's reward screen would: an act's boss moves the run on to the next act (or the end).
         IRunState state = player.RunState;

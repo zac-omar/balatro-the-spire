@@ -102,7 +102,7 @@ public abstract class StakeRelic : BalatroRelic
     public override Task BeforeCombatStart() => JimboRun.IsJimbo(Owner) ? JimboCombat.Begin(Owner) : Task.CompletedTask;
 
     public override Task AfterPlayerTurnStart(PlayerChoiceContext choiceContext, Player player) =>
-        player == Owner && JimboRun.IsJimbo(Owner) ? JimboCombat.TurnStart(Owner) : Task.CompletedTask;
+        player == Owner && JimboRun.IsJimbo(Owner) ? JimboCombat.TurnStart(Owner, choiceContext) : Task.CompletedTask;
 
     public override Task AfterCreatureAddedToCombat(Creature creature) =>
         JimboRun.IsJimbo(Owner) ? JimboCombat.CreatureAdded(creature) : Task.CompletedTask;
@@ -116,6 +116,9 @@ public abstract class StakeRelic : BalatroRelic
 
     public override Task AfterCombatVictory(CombatRoom room) =>
         JimboRun.IsJimbo(Owner) ? JimboCombat.Won(Owner, room) : Task.CompletedTask;
+
+    // The map waits for the cash-out to be collected.
+    public override bool ShouldProceedToNextMapPoint() => !(JimboRun.IsJimbo(Owner) && JimboCombat.CashingOut);
 
     public override bool TryModifyRewards(Player player, List<Reward> rewards, AbstractRoom? room)
     {

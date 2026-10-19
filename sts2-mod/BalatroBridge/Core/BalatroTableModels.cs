@@ -208,10 +208,10 @@ public sealed record PackSnapshot(string? Kind, int Choices, IReadOnlyList<Table
 }
 
 /// <summary>Hands and discards each StS2 turn gets in a Jimbo fight.</summary>
-public sealed record PerTurn(int Hands, int Discards)
+public sealed record PerTurn(int Hands, int Discards, int Turns)
 {
     public static PerTurn? FromJson(JsonNode? node) => node is JsonObject t
-        ? new PerTurn(BalatroState.Int(t["hands"]) ?? 1, BalatroState.Int(t["discards"]) ?? 0)
+        ? new PerTurn(BalatroState.Int(t["hands"]) ?? 1, BalatroState.Int(t["discards"]) ?? 0, BalatroState.Int(t["turns"]) ?? 4)
         : null;
 }
 
@@ -409,7 +409,7 @@ public sealed record CashOut(IReadOnlyList<CashOutRow> Rows, double Total, Table
 }
 
 /// <summary>Every playing card in Jimbo's run, for the deck view.</summary>
-public sealed record DeckListing(IReadOnlyList<TableCard> Cards, IReadOnlyDictionary<string, AtlasInfo> Atlases, int TextureScale)
+public sealed record DeckListing(IReadOnlyList<TableCard> Cards, IReadOnlyList<PokerHandInfo> Hands, IReadOnlyDictionary<string, AtlasInfo> Atlases, int TextureScale)
 {
     public static DeckListing FromJson(JsonObject d)
     {
@@ -424,8 +424,19 @@ public sealed record DeckListing(IReadOnlyList<TableCard> Cards, IReadOnlyDictio
                 }
             }
         }
-        return new DeckListing(TableCard.List(d["cards"]), atlases, BalatroState.Int(d["texture_scale"]) ?? 2);
+        return new DeckListing(TableCard.List(d["cards"]), PokerHandInfo.List(d["hands"]), atlases, BalatroState.Int(d["texture_scale"]) ?? 2);
     }
+}
+
+/// <summary>A poker hand's standing in the run, as Balatro's Run Info shows it.</summary>
+public sealed record PokerHandInfo(string Key, string Name, int Level, string Chips, string Mult, int Played)
+{
+    public static IReadOnlyList<PokerHandInfo> List(JsonNode? node) =>
+        node is JsonArray hands
+            ? hands.OfType<JsonObject>().Select(h => new PokerHandInfo(
+                BalatroState.Str(h["key"]) ?? "", BalatroState.Str(h["name"]) ?? "", BalatroState.Int(h["level"]) ?? 1,
+                TableText.Display(h["chips"]), TableText.Display(h["mult"]), BalatroState.Int(h["played"]) ?? 0)).ToList()
+            : [];
 }
 
 /// <summary>One step of Balatro's scoring sequence, replayed by StS2's scoring animation.</summary>

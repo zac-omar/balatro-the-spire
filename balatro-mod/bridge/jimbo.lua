@@ -295,9 +295,11 @@ local function on_duds(data, msg)
     end)
 end
 
--- The share of the blind's hands and discards each turn gets.
+-- The share of the blind's hands and discards each turn gets, and how many turns those hands
+-- last: past them, the fight is in overtime (StS2 makes the enemies stronger every turn).
 local function share_of(hands, discards)
-    return { hands = math.max(1, hands - 3), discards = math.max(0, discards - 2) }
+    local each = math.max(1, hands - 3)
+    return { hands = each, discards = math.max(0, discards - 2), turns = math.max(1, math.ceil(hands / each)) }
 end
 
 local function start_turn()
@@ -595,6 +597,22 @@ local function on_dollars(data, msg)
 end
 
 -- Every playing card in the run, for StS2's deck view.
+-- Balatro's Run Info: each poker hand's level, chips, mult and plays, in Balatro's order
+-- (secret hands only once they've turned up).
+local function poker_hands()
+    local list = {}
+    for _, key in ipairs(G.handlist) do
+        local stats = G.GAME.hands[key]
+        if stats and stats.visible then
+            list[#list + 1] = {
+                key = key, name = localize(key, 'poker_hands'),
+                level = stats.level, chips = stats.chips, mult = stats.mult, played = stats.played,
+            }
+        end
+    end
+    return list
+end
+
 local function on_deck(data, msg)
     link_from(data)
     local used = {}
@@ -610,7 +628,7 @@ local function on_deck(data, msg)
         info.pile = where[card] or 'deck'
         list[#list + 1] = info
     end
-    send('jimbo_deck', { cards = list, atlases = cards.atlases(used), texture_scale = G.SETTINGS.GRAPHICS.texture_scaling }, msg.id)
+    send('jimbo_deck', { cards = list, hands = poker_hands(), atlases = cards.atlases(used), texture_scale = G.SETTINGS.GRAPHICS.texture_scaling }, msg.id)
 end
 
 -- What the Dealer can offer: vouchers Balatro's shop could stock next (requirements met, none

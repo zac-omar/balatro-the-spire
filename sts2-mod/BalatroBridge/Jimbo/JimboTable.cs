@@ -74,6 +74,7 @@ internal static class JimboTable
                         ShopMove.Buy => await session.JimboBuy(link, choice.CardId),
                         ShopMove.BuyAndUse => await session.JimboBuy(link, choice.CardId, use: true),
                         ShopMove.Sell => await session.JimboSell(link, choice.CardId),
+                        ShopMove.MoveJoker => await session.JimboMoveJoker(link, choice.CardId, choice.To),
                         ShopMove.Use => await session.JimboUse(link, choice.CardId, []),
                         ShopMove.Reroll => await session.RerollShop(),
                         ShopMove.Pick => await session.JimboPick(link, choice.CardId, choice.HandCards ?? []),
@@ -150,6 +151,9 @@ internal static class JimboTable
                 break;
             case ShopMove.Sell:
                 TableFx.Sound("coin2", 1f, 0.8f);
+                break;
+            case ShopMove.MoveJoker:
+                TableFx.Sound("cardSlide1", 1f, 0.7f);
                 break;
             case ShopMove.Reroll:
                 TableFx.Sound("coin2");

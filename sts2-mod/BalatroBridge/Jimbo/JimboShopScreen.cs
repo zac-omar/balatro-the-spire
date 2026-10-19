@@ -20,17 +20,20 @@ internal enum ShopMove
     SkipPack,
     Leave,
     SkipBlind,
+    MoveJoker, // to slot To (1-based), as dragging a joker in Balatro
     Refresh, // shows the shop as Balatro has it now (after something outside the shop changed it)
 }
 
-/// <summary>What the player did in Jimbo's shop: <see cref="CardId"/> is the card it's about, and
-/// <see cref="HandCards"/> the cards selected in hand (a tarot from a pack works on them).</summary>
-internal sealed record ShopChoiceMade(ShopMove Move, int CardId = 0, int[]? HandCards = null);
+/// <summary>What the player did in Jimbo's shop: <see cref="CardId"/> is the card it's about,
+/// <see cref="HandCards"/> the cards selected in hand (a tarot from a pack works on them), and
+/// <see cref="To"/> where a moved joker goes.</summary>
+internal sealed record ShopChoiceMade(ShopMove Move, int CardId = 0, int[]? HandCards = null, int To = 0);
 
 /// <summary>
 /// Balatro's shop on the card table, for Jimbo: the card slots (jokers, tarots, planets...), the
 /// ante's voucher and two booster packs, Reroll and Next Round. Owned jokers and consumables sit
-/// along the top: click one to sell it (or use a consumable). Opening a pack turns the table into
+/// along the top: click one to sell it (or use a consumable), or move a joker left or right
+/// (jokers score in order, left to right). Opening a pack turns the table into
 /// the pack: pick its cards (tarots and spectrals work on the hand dealt below), or skip.
 /// Balatro decides everything; this class shows a snapshot and reports what the player chose.
 /// </summary>
@@ -44,6 +47,7 @@ internal sealed class JimboShopScreen
     private const float HandY = 930;
     private static readonly Color ShopRed = new("FE5F55");
     private static readonly Color RerollGreen = new("4BC292");
+    private static readonly Color RunInfoOrange = new("E8801C");
     private static readonly Color UseGreen = new("35BD86");
 
     private readonly CanvasLayer _layer;
@@ -194,7 +198,10 @@ internal sealed class JimboShopScreen
         _packViews.Clear();
         _handCards.Clear();
         HideTip();
+        // A joker just moved stays selected, to move it again.
+        int reselect = _selectedOwned != 0 && _moved ? _selectedOwned : 0;
         _selectedOwned = 0;
+        _moved = false;
 
         BalatroAudio.Instance.SetTrack(BalatroAudio.Track.Shop);
         _money.Text = "$" + TableText.Number(table.Dollars);
@@ -208,6 +215,7 @@ internal sealed class JimboShopScreen
         _nextText.Text = TableStyle.Markup(next?.Text ?? "");
 
         ShowOwned(table);
+        if (reselect != 0 && _ownedViews.TryGetValue(reselect, out CardView? moved)) SelectOwned(table.Jokers.First(j => j.Id == reselect), moved);
         if (table.Pack is PackSnapshot pack) await ShowPack(table, pack, dealIn);
         else if (table.Shop is ShopSnapshot shop) await ShowShop(table, shop, dealIn);
     }
@@ -271,6 +279,10 @@ internal sealed class JimboShopScreen
         }
 
         AddButton("Next Round", ShopRed, new Rect2(36, 860, 330, 96), true, () => Choose(new ShopChoiceMade(ShopMove.Leave)), size: 36);
+        AddButton("Run Info", RunInfoOrange, new Rect2(24, 152, 380, 62), true, () =>
+        {
+            if (JimboRun.Me() is { } me) TaskHelper.RunSafely(JimboDeckScreen.Toggle(me, Layer + 1));
+        }, size: 28);
         if (shop.NextBlind?.Tag is TagInfo tag) AddSkip(shop.NextBlind, tag);
         bool canReroll = shop.RerollCost <= 0 || shop.RerollCost <= money;
         AddButton("Reroll $" + TableText.Number(shop.RerollCost), RerollGreen, new Rect2(1560, 860, 330, 96), canReroll,
@@ -497,6 +509,7 @@ internal sealed class JimboShopScreen
     // Owned jokers (top middle) and consumables (top right): click to sell or use.
     private void ShowOwned(TableSnapshot table)
     {
+        _ownedViews.Clear();
         AddNode(TableStyle.Text($"Jokers {table.Jokers.Count}/{table.JokerSlots}", 20, new Color(StsColors.cream, 0.6f), new Rect2(520, 40, 900, 26), TableStyle.Regular, 4));
         float spacing = Math.Min(118, 880f / Math.Max(table.Jokers.Count, 1));
         float mid = (table.Jokers.Count - 1) / 2f;
@@ -504,6 +517,7 @@ internal sealed class JimboShopScreen
         {
             TableCard joker = table.Jokers[i];
             CardView view = AddCard(joker, new Vector2(970 + (i - mid) * spacing, TopRowY - 30), 0.68f, -1);
+            _ownedViews[joker.Id] = view;
             view.Root.GuiInput += input =>
             {
                 if (input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }) return;
@@ -527,6 +541,8 @@ internal sealed class JimboShopScreen
     }
 
     private readonly List<Control> _ownedButtons = new();
+    private readonly Dictionary<int, CardView> _ownedViews = new();
+    private bool _moved;
 
     // A selected joker or consumable shows Sell (and Use) under it.
     private void SelectOwned(TableCard card, CardView view)
@@ -551,6 +567,21 @@ internal sealed class JimboShopScreen
         Button sell = AddButton(card.Eternal ? "Eternal" : $"Sell ${TableText.Number(card.Sell ?? 0)}", TableStyle.Money,
             new Rect2(x - 62, y, 124, 44), !card.Eternal, () => Choose(new ShopChoiceMade(ShopMove.Sell, card.Id)), dark: true, size: 20);
         _ownedButtons.Add(sell);
+        if (card.IsJoker && _table is TableSnapshot table && table.Jokers.Count > 1)
+        {
+            // Jokers score left to right: move this one a slot either way.
+            int slot = table.Jokers.ToList().FindIndex(j => j.Id == card.Id) + 1;
+            foreach ((string label, int to, float dx) in new[] { ("<", slot - 1, -116f), (">", slot + 1, 68f) })
+            {
+                int target = to;
+                Button move = AddButton(label, new Color(0.32f, 0.36f, 0.42f), new Rect2(x + dx, y, 48, 44), slot > 0 && target >= 1 && target <= table.Jokers.Count, () =>
+                {
+                    _moved = true;
+                    Choose(new ShopChoiceMade(ShopMove.MoveJoker, card.Id, To: target));
+                }, size: 24);
+                _ownedButtons.Add(move);
+            }
+        }
         if (card.IsConsumable)
         {
             // Tarots that change playing cards need some selected in hand: they're for fights and packs.

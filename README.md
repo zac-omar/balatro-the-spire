@@ -73,11 +73,16 @@ last boss:
 - **Every fight is a blind**: the enemies' HP is its chip target. Pick cards, then **Play Hand**.
   Each scoring card flies at the enemy you clicked for a share of the hand's score, then the
   suits add a little: Hearts heal, Diamonds Block, Clubs Weak, Spades Vulnerable. **Discard**
-  gives Block equal to the cards' chips. Each turn has its own hands and discards and ends when
-  its hands run out.
+  gives Block equal to the cards' chips (in a fight with no discards, the played cards give it).
+  Each turn has its share of the blind's hands and discards and ends when its hands run out.
+- **Overtime**: a blind gives its hands and no more, as in Balatro. Once your turns have used
+  them (4 turns at White Stake), the enemies gain Strength every turn, more each time.
 - **A hand that dwarfs its target catches fire**, and so does Jimbo.
-- **Jokers are relics** and light up in the relic bar as they score. Status cards enemies hand out
-  land in his deck as dead cards. Hover any card to see what it does.
+- **Jokers are relics** and light up in the relic bar as they score, left to right. Right-click
+  one to sell it or move it along (in the shop, click it). Status cards enemies hand out land in
+  his deck as dead cards. Hover any card to see what it does.
+- **The deck button** in the top bar shows his deck and, as Balatro's Run Info does, every poker
+  hand's level, chips × mult and times played. In the shop, it's the Run Info button.
 - **After a fight**, Balatro's cash-out pays you and the next node is Balatro's shop: cards, a
   voucher, booster packs, rerolls and selling. You can skip the next Small or Big Blind for its tag.
 - **Consumables** (tarots, planets, spectrals) sit in the potion belt. Select cards in hand, then
