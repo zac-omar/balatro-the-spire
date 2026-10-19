@@ -12,7 +12,7 @@
 --   jimbo_win       -> StS2 won the fight: Balatro beats the blind and adds up the cash-out
 --   jimbo_cash_out  -> cashes out into the shop
 --   jimbo_buy, jimbo_sell, jimbo_use, jimbo_pick, jimbo_skip_pack, jimbo_highlight,
---   jimbo_move_joker, jimbo_dollars, jimbo_deck, jimbo_catalog
+--   jimbo_move_joker, jimbo_dollars, jimbo_deck, jimbo_catalog, jimbo_stats
 --
 -- In a fight (a "Jimbo blind") Balatro's own round rules give way to StS2's turns:
 --   * Each turn has a share of the blind's hands and discards: the blind's hands minus 3 and its
@@ -336,9 +336,16 @@ local function on_blind(data, msg)
             return nil
         end
         if not dealer.hand_settled() then return nil end
-        if not fight().per_turn then
+        local f, round = fight(), G.GAME.current_round
+        if not f.per_turn then
             -- What the blind gave the round (decks, vouchers, jokers like Burglar) is shared out per turn.
-            fight().per_turn = share_of(G.GAME.current_round.hands_left, G.GAME.current_round.discards_left)
+            f.blind_hands, f.blind_discards = round.hands_left, round.discards_left
+            f.used_hands, f.used_discards = 0, 0
+            f.per_turn = share_of(round.hands_left, round.discards_left)
+        else
+            -- What the last turn used of its share, for the cash-out's leftover hands.
+            f.used_hands = (f.used_hands or 0) + math.max(0, f.per_turn.hands - round.hands_left)
+            f.used_discards = (f.used_discards or 0) + math.max(0, f.per_turn.discards - round.discards_left)
         end
         start_turn()
         return reply_state()
@@ -380,6 +387,15 @@ local function on_win(data, msg)
                 ended = true
             elseif G.STATE == G.STATES.SELECTING_HAND and not dealer.is_playing() and dealer.events_idle() then
                 purge_duds()
+                -- The cash-out pays for the blind's hands (and discards) left unused, as Balatro's
+                -- does: a fight won in fewer turns earns more.
+                local f, round = fight(), G.GAME.current_round
+                if f and f.per_turn and f.blind_hands then
+                    local hands = (f.used_hands or 0) + math.max(0, f.per_turn.hands - round.hands_left)
+                    local discards = (f.used_discards or 0) + math.max(0, f.per_turn.discards - round.discards_left)
+                    round.hands_left = math.max(0, f.blind_hands - hands)
+                    round.discards_left = math.max(0, f.blind_discards - discards)
+                end
                 G.GAME.jimbo_fight = nil
                 cashing = { rows = {}, total = 0 }
                 G.GAME.chips = math.max(G.GAME.chips, G.GAME.blind.chips)
@@ -575,17 +591,22 @@ local function on_highlight(data, msg)
     end)
 end
 
+-- Moves a joker to slot `to`, as dragging it does. Queued behind any hand still scoring, so the
+-- order only changes between hands.
 local function on_move_joker(data, msg)
     link_from(data)
-    local card = find_card(G.jokers, data.card)
-    if not card then error('that joker is gone', 0) end
-    local to = math.max(1, math.min(#G.jokers.cards, tonumber(data.to) or 1))
-    for i, c in ipairs(G.jokers.cards) do
-        if c == card then table.remove(G.jokers.cards, i) break end
-    end
-    table.insert(G.jokers.cards, to, card)
-    G.jokers:set_ranks()
-    send('jimbo', dealer.snapshot(), msg.id)
+    pend(msg, 'move joker', function()
+        if not (stable() and dealer.events_idle()) then return nil end
+        local card = find_card(G.jokers, data.card)
+        if not card then error('that joker is gone', 0) end
+        local to = math.max(1, math.min(#G.jokers.cards, tonumber(data.to) or 1))
+        for i, c in ipairs(G.jokers.cards) do
+            if c == card then table.remove(G.jokers.cards, i) break end
+        end
+        table.insert(G.jokers.cards, to, card)
+        G.jokers:set_ranks()
+        return reply_state()
+    end)
 end
 
 -- StS2 took or gave money (a thief, say): Balatro's dollars follow.
@@ -629,6 +650,31 @@ local function on_deck(data, msg)
         list[#list + 1] = info
     end
     send('jimbo_deck', { cards = list, hands = poker_hands(), atlases = cards.atlases(used), texture_scale = G.SETTINGS.GRAPHICS.texture_scaling }, msg.id)
+end
+
+-- The run in numbers, as Balatro's game over screen shows it.
+local function on_stats(data, msg)
+    link_from(data)
+    local game = G.GAME
+    local scores = game.round_scores or {}
+    local function amount(key) return scores[key] and scores[key].amt or 0 end
+    local most, plays = nil, 0
+    for _, key in ipairs(G.handlist) do
+        local stats = game.hands[key]
+        if stats and stats.played > plays then most, plays = key, stats.played end
+    end
+    send('jimbo_stats', {
+        ante = game.round_resets.ante,
+        round = game.round,
+        best_hand = amount('hand'),
+        most_played = most and localize(most, 'poker_hands') or nil,
+        most_played_count = plays,
+        cards_played = amount('cards_played'),
+        cards_discarded = amount('cards_discarded'),
+        cards_purchased = amount('cards_purchased'),
+        times_rerolled = amount('times_rerolled'),
+        jokers = #G.jokers.cards,
+    }, msg.id)
 end
 
 -- What the Dealer can offer: vouchers Balatro's shop could stock next (requirements met, none
@@ -813,6 +859,7 @@ function jimbo.install(bridge)
     h.jimbo_move_joker = on_move_joker
     h.jimbo_dollars = on_dollars
     h.jimbo_deck = on_deck
+    h.jimbo_stats = on_stats
     h.jimbo_catalog = on_catalog
     h.jimbo_offers = on_offers
     h.jimbo_grant = on_grant

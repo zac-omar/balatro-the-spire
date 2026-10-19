@@ -83,7 +83,8 @@ last boss:
   his deck as dead cards. Hover any card to see what it does.
 - **The deck button** in the top bar shows his deck and, as Balatro's Run Info does, every poker
   hand's level, chips × mult and times played. In the shop, it's the Run Info button.
-- **After a fight**, Balatro's cash-out pays you and the next node is Balatro's shop: cards, a
+- **After a fight**, Balatro's cash-out pays you (the blind's unused hands pay $1 each, so a quick
+  win earns more) and the next node is Balatro's shop: cards, a
   voucher, booster packs, rerolls and selling. You can skip the next Small or Big Blind for its tag.
 - **Consumables** (tarots, planets, spectrals) sit in the potion belt. Select cards in hand, then
   use one from the belt. Discarding one sells it.
@@ -92,7 +93,9 @@ last boss:
 ### Deal In
 
 **Deal In** is a 1-energy colorless attack (uncommon): *"Play a hand of Balatro. Deal damage
-equal to 10% of its score"* (15% upgraded, capped at 9,999). Playing it opens a Balatro table
+equal to 10% of its score"* (15% upgraded, capped at 9,999). You get it from **A Wild Card**, a ?
+room in the first or second act of some runs, where Jimbo deals it to you: take it, gamble for an
+upgraded copy and a joker, or buy his house special. Playing it opens a Balatro table
 inside StS2, where you select up to 5 cards (click, or 1-8), **Discard** (D) and **Play Hand**
 (Enter). Each StS2 run has its own Balatro run: blinds carry over between plays, losing a blind
 just resets it, and beating one opens Balatro's shop, where jokers you buy become relics.
@@ -111,8 +114,8 @@ just resets it, and beating one opens Balatro's shop, where jokers you buy becom
 StS2's log is `%APPDATA%\SlayTheSpire2\logs\godot.log` (the mod's lines start with
 `[BalatroBridge]`). Balatro's side logs to `%APPDATA%\BalatroBridge\bridge.log`.
 
-In StS2's dev console (backtick), `card BALATRO_DEAL_IN` gives you the Deal In card and
-`relic BALATRO_JOKER` gives you a joker.
+In StS2's dev console (backtick), `event BALATRO_WILD_CARD` takes you to Jimbo's table,
+`card BALATRO_DEAL_IN` gives you the Deal In card and `relic BALATRO_JOKER` gives you a joker.
 
 ## Saves
 

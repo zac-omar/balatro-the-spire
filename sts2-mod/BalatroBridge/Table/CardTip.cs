@@ -29,7 +29,7 @@ internal sealed class CardTip
     public static string TextFor(TableCard card)
     {
         string text = card.Text ?? BalatroCatalog.Text(card.Key) ?? (card.IsPlayingCard ? $"[blue]+{TableText.Number(card.Chips ?? 0)}[/blue] chips" : "");
-        if (card.Debuffed && card.Dud == null) text +=(text.Length > 0 ? "\n" : "") + "[red]Debuffed: it won't score.[/red]";
+        if (card.Debuffed && card.Dud == null) text +=(text.Length > 0 ? "\n" : "") + "[red]Debuffed: doesn't score.[/red]";
         return text;
     }
 

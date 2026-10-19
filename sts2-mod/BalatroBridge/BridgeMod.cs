@@ -48,7 +48,8 @@ public static class BridgeMod
         // Content and patches go in first: pools freeze and loc tables load right after mod init.
         // Jimbo's relics and potions (every Balatro item) live in his own pools, which StS2 never
         // rolls from: only Balatro hands them out.
-        ModHelper.AddModelToPool<ColorlessCardPool, BalatroDealIn>();
+        // Deal In is an event card: Jimbo's table (BalatroWildCard) is the only place to get it.
+        ModHelper.AddModelToPool<EventCardPool, BalatroDealIn>();
         new Harmony(ModId).PatchAll(typeof(BridgeMod).Assembly);
 
         string modDir = Path.GetDirectoryName(typeof(BridgeMod).Assembly.Location)!;

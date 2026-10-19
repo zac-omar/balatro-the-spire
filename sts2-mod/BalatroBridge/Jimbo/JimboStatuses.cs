@@ -114,10 +114,10 @@ internal static class JimboStatuses
     {
         var lines = new List<string>();
         if (ActsAtTurnEnd(card)) lines.Add(card.GetDescriptionForPile(PileType.Hand));
-        lines.Add("[color=#9aa0a6]A status card: it never scores, and takes up room in hand.[/color]");
-        if (card.Keywords.Contains(CardKeyword.Ethereal)) lines.Add("Burns away at the end of your turn.");
-        if (card.Keywords.Contains(CardKeyword.Exhaust)) lines.Add("Gone once discarded or played.");
-        lines.Add("[color=#9aa0a6]Leaves your deck when the fight ends.[/color]");
+        lines.Add("Never scores.");
+        if (card.Keywords.Contains(CardKeyword.Ethereal)) lines.Add("[gold]Ethereal[/gold].");
+        if (card.Keywords.Contains(CardKeyword.Exhaust)) lines.Add("[gold]Exhaust[/gold].");
+        lines.Add("[color=#9aa0a6]Removed after combat.[/color]");
         return string.Join("\n", lines);
     }
 }

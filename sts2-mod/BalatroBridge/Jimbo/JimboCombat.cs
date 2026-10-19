@@ -210,8 +210,9 @@ internal static class JimboCombat
             await PowerCmd.Apply<StrengthPower>(choiceContext, enemy, strength, null, null);
         }
         TableFx.Sound(over == 1 ? "gong" : "timpani", 1f, 0.6f);
-        Hand?.SetStatus($"Overtime! The blind's hands are spent: enemies +{strength} Strength", StsColors.red);
-        JimboQuips.Maybe(player, JimboQuips.Moment.Overtime);
+        Hand?.SetStatus($"Overtime! Enemies gain {strength} Strength.", StsColors.red);
+        // A word as overtime starts, and now and then as it drags on.
+        if (over % 3 == 1) JimboQuips.Maybe(player, JimboQuips.Moment.Overtime);
         return true;
     }
 

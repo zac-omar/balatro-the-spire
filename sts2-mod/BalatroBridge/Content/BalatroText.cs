@@ -18,25 +18,32 @@ internal static class BalatroText
         string text = (relic.IsMutable ? relic.LiveText : null) ?? BalatroCatalog.Text(relic.BalatroKey) ?? Fallback(relic.Item);
         if (relic is StakeRelic) text = StakeText(relic.BalatroKey, text);
         // Jimbo's jokers can be sold from the relic bar (JimboRelicBar).
-        if (relic is JokerRelic { IsMutable: true } joker && Jimbo.JimboRun.IsJimbo(joker.Owner)) text += "\n[color=#9aa0a6]Right-click to sell or move.[/color]";
+        if (relic is JokerRelic { IsMutable: true } joker)
+        {
+            // In Jimbo's runs they're his jokers; anyone else's only play in Deal In's hands.
+            text += Jimbo.JimboRun.IsJimbo(joker.Owner)
+                ? "\n[color=#9aa0a6]Right-click to sell or move.[/color]"
+                : "\n[color=#9aa0a6]Only affects [gold]Deal In[/gold].[/color]";
+        }
         return text;
     }
 
     // Jimbo's starting relic: what the stake adds, then the rules his whole run is played by.
     private static string StakeText(string key, string balatro)
     {
-        string stake = key == "stake_white" ? "No handicaps. Higher Ascensions play harder stakes." : balatro;
-        return stake + "\n\n[gold]Enemy HP[/gold] is the blind's score." +
-               "\n[blue]Play[/blue]: each scoring card strikes. [red]Hearts[/red] heal, [orange]Diamonds[/orange] Block, [blue]Clubs[/blue] Weak, [purple]Spades[/purple] Vulnerable." +
-               "\n[red]Discard[/red]: Block equal to the cards' chips (with no discards, played cards give it)." +
-               "\n[red]Overtime[/red]: once the blind's hands are spent, enemies gain more Strength every turn.";
+        string stake = key == "stake_white" ? "Base difficulty." : balatro;
+        return stake + "\n\nEnemy HP equals the blind's score." +
+               "\nPlaying a hand deals its score as damage." +
+               "\nScoring Hearts heal [blue]1[/blue], Diamonds give [blue]3[/blue] [gold]Block[/gold], Clubs apply [blue]1[/blue] [gold]Weak[/gold], Spades apply [blue]1[/blue] [gold]Vulnerable[/gold]." +
+               "\nDiscarding gives [gold]Block[/gold] equal to the cards' chips." +
+               "\nOnce the blind's hands run out, enemies gain [gold]Strength[/gold] each turn.";
     }
 
     public static string For(ConsumablePotion potion)
     {
         string text = BalatroCatalog.Text(potion.BalatroKey) ?? Fallback(potion.Item);
         // How Jimbo's belt works: cards that change playing cards work on the ones selected in hand.
-        if (potion.IsMutable && Jimbo.JimboRun.IsJimbo(potion.Owner)) text += "\n[color=#9aa0a6]Select cards in hand first if it changes cards. Discard it to sell it.[/color]";
+        if (potion.IsMutable && Jimbo.JimboRun.IsJimbo(potion.Owner)) text += "\n[color=#9aa0a6]Select cards first if it changes cards. Discard to sell.[/color]";
         return text;
     }
 

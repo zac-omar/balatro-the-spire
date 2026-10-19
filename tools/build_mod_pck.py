@@ -229,6 +229,19 @@ def tag_portrait(sheets: Path) -> Image.Image:
     return canvas
 
 
+def wild_card_portrait(sheets: Path, jokers: Image.Image, enhancers: Image.Image) -> Image.Image:
+    """A Wild Card: Jimbo leaning over a card table in the Spire, one card face up between two face down."""
+    canvas = felt((1720, 806), (120, 40, 52), (22, 10, 16), centre=(0.31, 0.5))
+    deck = Image.open(sheets / "8BitDeck.png").convert("RGBA")
+    ace = cell(enhancers, 1, 0).copy()  # a plain card front...
+    ace.alpha_composite(cell(deck, 12, 3))  # ...with the Ace of Spades on it
+    for dx, angle in ((-160, 14), (160, -14)):
+        paste(canvas, pixel_scale(cell(enhancers, 0, 0), 1.1), (530 + dx, 600), angle=angle)
+    paste(canvas, pixel_scale(cell(jokers, *JOKER_CELL), 1.7), (530, 265), angle=6)
+    paste(canvas, pixel_scale(ace, 1.3), (530, 590))
+    return canvas
+
+
 # --- Scenes -----------------------------------------------------------------------------------
 
 def creature_visuals() -> str:
@@ -435,6 +448,8 @@ def build(balatro: Path) -> Pack:
     pack.texture("res://images/events/balatro_dealer.png", dealer_portrait(jokers, enhancers))
     pack.texture("res://images/events/balatro_shop.png", shop_portrait(sheets, jokers))
     pack.texture("res://images/events/balatro_tag.png", tag_portrait(sheets))
+    # Jimbo's table in other characters' runs, where Deal In comes from.
+    pack.texture("res://images/events/balatro_wild_card.png", wild_card_portrait(sheets, jokers, enhancers))
 
     pack.text(f"res://scenes/creature_visuals/{CHARACTER}.tscn", creature_visuals())
     pack.text(f"res://scenes/ui/character_icons/{CHARACTER}_icon.tscn", character_icon())

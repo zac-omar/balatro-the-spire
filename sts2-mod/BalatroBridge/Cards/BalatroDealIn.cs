@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 
 namespace BalatroBridge.Cards;
@@ -29,6 +30,9 @@ public sealed class BalatroDealIn : CardModel
     }
 
     protected override IEnumerable<DynamicVar> CanonicalVars => [new IntVar(PercentVar, 10m)];
+
+    // It comes from Jimbo's event (the event pool), but it's a colorless card at heart.
+    public override CardPoolModel VisualCardPool => ModelDb.CardPool<ColorlessCardPool>();
 
     // Borrows Jackpot's art until the mod ships its own.
     public override string PortraitPath => ImageHelper.GetImagePath("atlases/card_atlas.sprites/colorless/jackpot.tres");

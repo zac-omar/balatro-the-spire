@@ -189,6 +189,10 @@ public sealed class BalatroSession
     public async Task<DeckListing> JimboDeck(JimboLink link) =>
         DeckListing.FromJson((await Request("jimbo_deck", link.ToJson(), JimboTimeout)).Data);
 
+    /// <summary>The run in numbers (best hand, most played hand, cards played...), for the game over screen.</summary>
+    public async Task<RunStats> JimboStats(JimboLink link) =>
+        RunStats.FromJson((await Request("jimbo_stats", link.ToJson(), JimboTimeout)).Data);
+
     /// <summary>What the Dealer may offer: "voucher" (what the shop could stock next) or "legendary" jokers.</summary>
     public async Task<IReadOnlyList<string>> JimboOffers(JimboLink link, string kind, int count) =>
         (await Request("jimbo_offers", With(link, new JsonObject { ["kind"] = kind, ["count"] = count }), JimboTimeout)).Data["keys"]

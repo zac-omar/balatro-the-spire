@@ -155,7 +155,7 @@ internal static class JimboMapChips
             if (Blind(__instance) != null || JimboActMap.BlindAt(state!.CurrentActIndex, __instance.Point.coord.row) is not var (ante, _)) return;
             ModText.SetLive("characters", TipTitleKey, "Boss Blind");
             NHoverTipSet.CreateAndShow(__instance, new HoverTip(new LocString("characters", TipTitleKey),
-                $"Ante {ante}. Balatro picks this Boss Blind when the ante begins.", null), HoverTipAlignment.Right);
+                $"Ante {ante}. Revealed when the ante begins.", null), HoverTipAlignment.Right);
         }
     }
 }

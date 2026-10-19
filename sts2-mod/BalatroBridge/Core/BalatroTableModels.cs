@@ -428,6 +428,17 @@ public sealed record DeckListing(IReadOnlyList<TableCard> Cards, IReadOnlyList<P
     }
 }
 
+/// <summary>A Balatro run in numbers, as Balatro's game over screen shows it.</summary>
+public sealed record RunStats(int Ante, int Round, double BestHand, string? MostPlayed, int MostPlayedCount,
+    int CardsPlayed, int CardsDiscarded, int CardsPurchased, int TimesRerolled, int Jokers)
+{
+    public static RunStats FromJson(JsonObject d) => new(
+        BalatroState.Int(d["ante"]) ?? 1, BalatroState.Int(d["round"]) ?? 0, BalatroState.Num(d["best_hand"]) ?? 0,
+        BalatroState.Str(d["most_played"]), BalatroState.Int(d["most_played_count"]) ?? 0,
+        BalatroState.Int(d["cards_played"]) ?? 0, BalatroState.Int(d["cards_discarded"]) ?? 0,
+        BalatroState.Int(d["cards_purchased"]) ?? 0, BalatroState.Int(d["times_rerolled"]) ?? 0, BalatroState.Int(d["jokers"]) ?? 0);
+}
+
 /// <summary>A poker hand's standing in the run, as Balatro's Run Info shows it.</summary>
 public sealed record PokerHandInfo(string Key, string Name, int Level, string Chips, string Mult, int Played)
 {
