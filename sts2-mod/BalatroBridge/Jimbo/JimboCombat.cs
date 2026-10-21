@@ -50,7 +50,12 @@ internal static class JimboCombat
     // Overtime: each turn past the blind's hands, the enemies gain this much more Strength than the last.
     private const int OvertimeStrength = 3;
 
+    // Mr. Bones saves a lost round whose hands scored at least this share of the blind.
+    private const double MrBonesShare = 0.25;
+
     private static decimal _hpScale = 1;
+    private static double _blindChips; // the blind's chips the enemies' HP was last scaled to
+    private static bool _savedByBones;
     private static bool _begun;
     private static bool _saidLowHp;
     private static JimboQuips.Moment? _greeting; // said as his first turn begins, once the banner's gone
@@ -118,6 +123,8 @@ internal static class JimboCombat
             decimal blind = (decimal)Math.Min(table.Blind?.Chips ?? 300, (double)MaxHp);
             decimal total = enemies.Sum(e => (decimal)e.MaxHp);
             _hpScale = total > 0 ? blind / total : 1;
+            _blindChips = (double)blind;
+            _savedByBones = false;
             foreach (Creature enemy in enemies) await CreatureCmd.SetMaxAndCurrentHp(enemy, ScaledHp(enemy.MaxHp));
             _begun = true;
             foreach (Creature enemy in enemies) JimboScaling.Rescale(enemy);
@@ -141,6 +148,61 @@ internal static class JimboCombat
     }
 
     private static decimal ScaledHp(int hp) => Math.Clamp(Math.Round(hp * _hpScale), 1, MaxHp);
+
+    /// <summary>
+    /// The blind's chips changed mid-fight (a Boss Blind disabled by Luchador: The Wall halves, Violet
+    /// Vessel thirds): the enemies' HP and max HP follow, as they were scaled to the blind at the start.
+    /// </summary>
+    public static async Task FollowBlind(Player player, TableSnapshot table)
+    {
+        if (!_begun || !table.InFight || table.Blind?.Chips is not double chips || chips <= 0 || _blindChips <= 0) return;
+        double ratio = Math.Min(chips, (double)MaxHp) / _blindChips;
+        if (Math.Abs(ratio - 1) < 1e-9 || player.Creature.CombatState is not CombatState state) return;
+        _blindChips = Math.Min(chips, (double)MaxHp);
+        _hpScale *= (decimal)ratio;
+        JimboScaling.Bypass = true;
+        try
+        {
+            foreach (Creature enemy in state.Enemies.Where(e => e.IsAlive).ToList())
+            {
+                decimal current = enemy.CurrentHp;
+                await CreatureCmd.SetMaxHp(enemy, Math.Clamp(Math.Round(enemy.MaxHp * (decimal)ratio), 1, MaxHp));
+                await CreatureCmd.SetCurrentHp(enemy, Math.Clamp(Math.Round(current * (decimal)ratio), 1, enemy.MaxHp));
+            }
+        }
+        finally
+        {
+            JimboScaling.Bypass = false;
+        }
+        BridgeMod.LogInfo($"jimbo: the blind is now {chips} chips; enemies x{ratio:0.##}");
+    }
+
+    /// <summary>
+    /// Whether Mr. Bones (the joker <paramref name="relic"/>) would save Jimbo from dying now: as in
+    /// Balatro, the fight's hands must have scored a quarter of the blind, and he mustn't be debuffed.
+    /// </summary>
+    internal static bool MrBonesWouldSave(Content.JokerRelic relic)
+    {
+        if (relic.BalatroKey != "j_mr_bones" || !_begun || _savedByBones || relic.Owner is not Player player || !JimboRun.IsJimbo(player)) return false;
+        if (JimboRun.Last is not { InFight: true, Blind.Chips: > 0 } table) return false;
+        TableCard? card = table.Jokers.FirstOrDefault(j => j.Id == relic.CardId);
+        return card is { Debuffed: false } && table.RoundChips / table.Blind!.Chips!.Value >= MrBonesShare;
+    }
+
+    /// <summary>
+    /// Mr. Bones stepped in: Jimbo lives on at 1 HP and the fight ends as won. Balatro then saves the
+    /// round itself (no blind reward) and Mr. Bones goes, as he does in Balatro (see CashOut).
+    /// </summary>
+    internal static async Task SavedByMrBones(Player player, Creature creature)
+    {
+        _savedByBones = true;
+        await CreatureCmd.Heal(creature, 1);
+        Hand?.SetStatus("Saved by Mr. Bones!", StsColors.gold);
+        if (player.Creature.CombatState is CombatState state)
+        {
+            await CreatureCmd.Kill(state.Enemies.Where(e => e.IsAlive).ToList(), force: true);
+        }
+    }
 
     /// <summary>A summoned enemy joins the blind at the same scale as the rest.</summary>
     public static async Task CreatureAdded(Creature creature)
@@ -458,8 +520,12 @@ internal static class JimboCombat
     {
         try
         {
-            CashOut cash = await JimboRun.Session().JimboWin(JimboRun.LinkFor(player));
-            await JimboRun.Apply(player, cash.Table);
+            bool saved = _savedByBones;
+            _savedByBones = false;
+            CashOut cash = await JimboRun.Session().JimboWin(JimboRun.LinkFor(player), saved);
+            // What the round's end already paid (Gold Cards held, Rental) is shown on the cash-out
+            // and arrives with it, so gold doesn't move before the player collects.
+            await JimboRun.Apply(player, cash.Table with { Dollars = cash.Table.Dollars - cash.PaidTotal });
             await JimboCashOutScreen.Show(cash);
             TableSnapshot shop = await JimboRun.Session().JimboCashOut(JimboRun.LinkFor(player));
             await JimboRun.Apply(player, shop);

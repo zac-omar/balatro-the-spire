@@ -396,16 +396,34 @@ public sealed record HighlightResult(HandPreview Preview, IReadOnlyList<int> Usa
 /// <summary>One line of a cash-out: a blind's reward, leftover hands, interest, a joker's payout.</summary>
 public sealed record CashOutRow(string Name, string Label, double Dollars);
 
+/// <summary>Money a won fight's end of round paid before the cash-out: Gold Cards held, Rental.</summary>
+public sealed record CashOutPaid(string Label, double Dollars, int Count);
+
 /// <summary>A won fight's cash-out, as Balatro added it up, and the run after it.</summary>
 public sealed record CashOut(IReadOnlyList<CashOutRow> Rows, double Total, TableSnapshot Table)
 {
+    /// <summary>What the round's end paid before the cash-out; already in the table's dollars.</summary>
+    public IReadOnlyList<CashOutPaid> Paid { get; init; } = [];
+
+    /// <summary>What jokers and cards said as the round ended ("Gros Michel: Extinct!").</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
+    public double PaidTotal => Paid.Sum(p => p.Dollars);
+
     public static CashOut FromJson(JsonObject c) => new(
         c["rows"] is JsonArray rows
             ? rows.OfType<JsonObject>().Select(r => new CashOutRow(BalatroState.Str(r["name"]) ?? "", BalatroState.Str(r["label"]) ?? "",
                 BalatroState.Num(r["dollars"]) ?? 0)).ToList()
             : [],
         BalatroState.Num(c["total"]) ?? 0,
-        c["table"] is JsonObject t ? TableSnapshot.FromJson(t) : throw new System.FormatException("cash-out without the table"));
+        c["table"] is JsonObject t ? TableSnapshot.FromJson(t) : throw new System.FormatException("cash-out without the table"))
+    {
+        Paid = c["paid"] is JsonArray paid
+            ? paid.OfType<JsonObject>().Select(p => new CashOutPaid(BalatroState.Str(p["label"]) ?? "", BalatroState.Num(p["dollars"]) ?? 0,
+                BalatroState.Int(p["count"]) ?? 1)).ToList()
+            : [],
+        Notes = c["notes"] is JsonArray notes ? notes.Select(BalatroState.Str).OfType<string>().ToList() : [],
+    };
 }
 
 /// <summary>Every playing card in Jimbo's run, for the deck view.</summary>

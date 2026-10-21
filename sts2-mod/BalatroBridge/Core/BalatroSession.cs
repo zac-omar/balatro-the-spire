@@ -155,9 +155,16 @@ public sealed class BalatroSession
 
     public async Task<TableSnapshot> JimboTurn(JimboLink link) => await Table("jimbo_turn", link);
 
-    /// <summary>The fight is won: Balatro beats the blind and adds up the cash-out.</summary>
-    public async Task<CashOut> JimboWin(JimboLink link) =>
-        CashOut.FromJson((await Request("jimbo_win", link.ToJson(), JimboTimeout)).Data);
+    /// <summary>
+    /// The fight is won: Balatro beats the blind and adds up the cash-out. <paramref name="saved"/>:
+    /// Mr. Bones saved Jimbo instead, so the blind isn't beaten and Balatro's Mr. Bones saves the round.
+    /// </summary>
+    public async Task<CashOut> JimboWin(JimboLink link, bool saved = false)
+    {
+        JsonObject data = link.ToJson();
+        if (saved) data["saved"] = true;
+        return CashOut.FromJson((await Request("jimbo_win", data, JimboTimeout)).Data);
+    }
 
     public async Task<TableSnapshot> JimboCashOut(JimboLink link) => await Table("jimbo_cash_out", link);
 

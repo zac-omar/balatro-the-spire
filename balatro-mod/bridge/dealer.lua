@@ -132,6 +132,22 @@ local function blind_choice(kind, used)
 end
 dealer.blind_choice = blind_choice
 
+-- The poker hand an Orbital Tag levels, chosen as Balatro's blind select chooses it: once per ante
+-- and blind, from the 'orbital' stream, in blind order. StS2 offers the skip in the shop, before
+-- Balatro has built the blind select, so the choice is made here; the blind select then finds it
+-- made, and the run plays out the same.
+local function choose_orbital_hand(blind_type)
+    local ante = G.GAME.round_resets.ante
+    G.GAME.orbital_choices = G.GAME.orbital_choices or {}
+    G.GAME.orbital_choices[ante] = G.GAME.orbital_choices[ante] or {}
+    if G.GAME.orbital_choices[ante][blind_type] then return end
+    local hands = {}
+    for key, hand in pairs(G.GAME.hands) do
+        if hand.visible then hands[#hands + 1] = key end
+    end
+    G.GAME.orbital_choices[ante][blind_type] = pseudorandom_element(hands, pseudoseed('orbital'))
+end
+
 -- The blind that comes after the shop, as Balatro's blind select works it out.
 local function next_blind_info(used)
     local states = G.GAME.round_resets.blind_states
@@ -143,10 +159,11 @@ local function next_blind_info(used)
     local tag_key = on_deck ~= 'Boss' and G.GAME.round_resets.blind_tags and G.GAME.round_resets.blind_tags[on_deck]
     if tag_key and G.P_TAGS[tag_key] then
         local proto = G.P_TAGS[tag_key]
+        if proto.name == 'Orbital Tag' then pcall(choose_orbital_hand, on_deck) end
         info.tag = {
             key = tag_key,
             name = loc({ type = 'name_text', set = 'Tag', key = tag_key }) or proto.name,
-            text = cards.text('Tag', tag_key, proto.config and { proto.config.dollars or proto.config.max or proto.config.levels } or {}),
+            text = cards.tag_text(tag_key, on_deck),
             sprite = used and cards.sprite('tags', proto.pos, used) or nil,
         }
     end

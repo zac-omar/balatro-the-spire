@@ -308,6 +308,29 @@ local function start_turn()
     round.discards_left = fight().per_turn.discards
 end
 
+-- The fight's hands and discards still to come, counted over the whole fight as Balatro counts a
+-- round's: its totals less what's been played and discarded, never below 0. A fight whose turns
+-- get no discards has none to use, so none are left. A hand that's scoring counts as played
+-- (Balatro only counts it once it has scored).
+local function fight_left(scoring)
+    local f, round = fight(), G.GAME.current_round
+    local hands = math.max(0, (f.blind_hands or 0) - round.hands_played - (scoring and 1 or 0))
+    local discards = 0
+    if f.per_turn and f.per_turn.discards > 0 then discards = math.max(0, (f.blind_discards or 0) - round.discards_used) end
+    return hands, discards
+end
+
+-- Whether Balatro's Mr. Bones would save this round: he's there and not debuffed, and the
+-- fight's hands have scored at least a quarter of the blind.
+local function bones_can_save()
+    local blind = G.GAME.blind
+    if not (blind and blind.chips and blind.chips > 0) or G.GAME.chips / blind.chips < 0.25 then return false end
+    for _, joker in ipairs(G.jokers.cards) do
+        if joker.ability.name == 'Mr. Bones' and not joker.debuff then return true end
+    end
+    return false
+end
+
 -- The fight begins: Balatro plays the blind on deck (StS2 names the kind it expects).
 local function on_blind(data, msg)
     link_from(data)
@@ -319,7 +342,11 @@ local function on_blind(data, msg)
             if s == G.STATES.SELECTING_HAND or s == G.STATES.HAND_PLAYED or s == G.STATES.DRAW_TO_HAND then
                 -- Already in this blind (StS2 restarted the fight after a reload): carry on with it.
                 selected = true
-                G.GAME.jimbo_fight = fight() or { per_turn = share_of(G.GAME.round_resets.hands, G.GAME.round_resets.discards) }
+                local resets = G.GAME.round_resets
+                G.GAME.jimbo_fight = fight() or {
+                    per_turn = share_of(resets.hands, resets.discards), blind_hands = resets.hands, blind_discards = resets.discards,
+                    first_drawn = true,
+                }
             elseif s == G.STATES.BLIND_SELECT then
                 local select = dealer.select_blind_button()
                 if not select or not dealer.events_idle() then return nil end
@@ -338,14 +365,11 @@ local function on_blind(data, msg)
         if not dealer.hand_settled() then return nil end
         local f, round = fight(), G.GAME.current_round
         if not f.per_turn then
-            -- What the blind gave the round (decks, vouchers, jokers like Burglar) is shared out per turn.
+            -- What the blind gave the round (decks, vouchers, jokers like Burglar) is shared out per
+            -- turn. What's been used of it is Balatro's own count (see fight_left).
             f.blind_hands, f.blind_discards = round.hands_left, round.discards_left
-            f.used_hands, f.used_discards = 0, 0
             f.per_turn = share_of(round.hands_left, round.discards_left)
-        else
-            -- What the last turn used of its share, for the cash-out's leftover hands.
-            f.used_hands = (f.used_hands or 0) + math.max(0, f.per_turn.hands - round.hands_left)
-            f.used_discards = (f.used_discards or 0) + math.max(0, f.per_turn.discards - round.discards_left)
+            f.first_drawn = true -- the fight's hand is dealt; later refills aren't a round start
         end
         start_turn()
         return reply_state()
@@ -380,25 +404,23 @@ local function on_win(data, msg)
         if G.STATE == G.STATES.SHOP and dealer.shop_settled() then
             -- Already cashed out (StS2 asked again after a reload).
             G.GAME.jimbo_fight = nil
-            return 'jimbo_cash_out', { rows = {}, total = 0, table = dealer.snapshot() }
+            return 'jimbo_cash_out', { rows = {}, total = 0, paid = {}, notes = {}, table = dealer.snapshot() }
         end
         if not ended then
             if G.STATE == G.STATES.ROUND_EVAL then
                 ended = true
             elseif G.STATE == G.STATES.SELECTING_HAND and not dealer.is_playing() and dealer.events_idle() then
                 purge_duds()
-                -- The cash-out pays for the blind's hands (and discards) left unused, as Balatro's
-                -- does: a fight won in fewer turns earns more.
+                -- The cash-out pays for the fight's hands (and discards) left unused, as Balatro's
+                -- does: a fight won in fewer hands earns more.
                 local f, round = fight(), G.GAME.current_round
-                if f and f.per_turn and f.blind_hands then
-                    local hands = (f.used_hands or 0) + math.max(0, f.per_turn.hands - round.hands_left)
-                    local discards = (f.used_discards or 0) + math.max(0, f.per_turn.discards - round.discards_left)
-                    round.hands_left = math.max(0, f.blind_hands - hands)
-                    round.discards_left = math.max(0, f.blind_discards - discards)
-                end
+                if f and f.blind_hands then round.hands_left, round.discards_left = fight_left(false) end
+                -- Mr. Bones saved Jimbo in StS2: the blind isn't beaten, and Balatro's own end of
+                -- round lets Mr. Bones save the run (and go), as in Balatro.
+                local saved = data.saved and bones_can_save()
                 G.GAME.jimbo_fight = nil
-                cashing = { rows = {}, total = 0 }
-                G.GAME.chips = math.max(G.GAME.chips, G.GAME.blind.chips)
+                cashing = { rows = {}, total = 0, paid = {}, notes = {} }
+                if not saved then G.GAME.chips = math.max(G.GAME.chips, G.GAME.blind.chips) end
                 G.STATE = G.STATES.NEW_ROUND
                 G.STATE_COMPLETE = false
                 ended = true
@@ -406,10 +428,12 @@ local function on_win(data, msg)
             return nil
         end
         if G.STATE ~= G.STATES.ROUND_EVAL or not dealer.cash_out_button() then return nil end
-        local rows = cashing and cashing.rows or {}
+        local summary = cashing or { rows = {}, paid = {}, notes = {} }
         local total = cashing and cashing.total or G.GAME.current_round.dollars
         cashing = nil
-        return 'jimbo_cash_out', { rows = rows, total = total, table = dealer.snapshot() }
+        return 'jimbo_cash_out', {
+            rows = summary.rows, total = total, paid = summary.paid, notes = summary.notes, table = dealer.snapshot(),
+        }
     end)
 end
 
@@ -780,9 +804,119 @@ local function end_round_override()
     return true
 end
 
+-- Jokers that count cards would count StS2's status duds too (they're Stone Cards in the deck), so
+-- each counts with the duds taken out of the cards it looks at.
+local DUD_BLIND = {
+    ['Stone Joker'] = function() return G.playing_cards end,
+    ["Driver's License"] = function() return G.playing_cards end,
+    ['Erosion'] = function() return G.playing_cards end,
+    ['Blue Joker'] = function() return G.deck and G.deck.cards end,
+    ['Blackboard'] = function() return G.hand and G.hand.cards end,
+}
+
+-- Runs fn(...) with the duds taken out of `list`, then puts them back where they were.
+local function without_duds(list, fn, ...)
+    local taken = {}
+    for i = #list, 1, -1 do
+        if is_dud(list[i]) then taken[#taken + 1] = { i, table.remove(list, i) } end
+    end
+    if #taken == 0 then return fn(...) end
+    local results = { pcall(fn, ...) }
+    for k = #taken, 1, -1 do table.insert(list, taken[k][1], taken[k][2]) end
+    if not results[1] then error(results[2], 0) end
+    return unpack(results, 2, table.maxn(results))
+end
+
+local function dud_blind(card, fn, ...)
+    local list_of = in_combat() and card.ability and DUD_BLIND[card.ability.name]
+    local list = list_of and list_of()
+    if not list then return fn(card, ...) end
+    return without_duds(list, fn, card, ...)
+end
+
+-- What a won fight's end of round does before the cash-out (Gold Cards held, Rental, Blue Seals,
+-- jokers' end-of-round words): Balatro shows it on the cards, which StS2 has put away by then, so
+-- it joins the cash-out instead. Money is summed per kind of card; words become notes.
+local function note_round_end(card, eval_type, amt, extra)
+    local center = card.config and card.config.center
+    local playing = card.ability and (card.ability.set == 'Default' or card.ability.set == 'Enhanced')
+    local name = center and cards.name(center) or '?'
+    if eval_type == 'dollars' and tonumber(amt) then
+        local label = playing and name
+            or (cards.loc({ type = 'name_text', set = 'Other', key = 'rental' }) or 'Rental') .. ': ' .. name
+        for _, row in ipairs(cashing.paid) do
+            if row.label == label then
+                row.dollars, row.count = row.dollars + amt, row.count + 1
+                return
+            end
+        end
+        cashing.paid[#cashing.paid + 1] = { label = label, dollars = amt, count = 1 }
+    elseif (eval_type == 'jokers' or eval_type == 'extra') and type(extra) == 'table' and type(extra.message) == 'string' then
+        if extra.message == cards.loc('k_again_ex') then return end -- a retrigger; its payout is counted
+        if playing and card.seal then
+            name = cards.loc({ type = 'name_text', set = 'Other', key = string.lower(card.seal) .. '_seal' }) or name
+        end
+        cashing.notes[#cashing.notes + 1] = name .. ': ' .. extra.message
+    end
+end
+
 local function install_rules()
     dealer.end_round_override = end_round_override
     dealer.in_combat = in_combat
+
+    -- While a hand scores, jokers that count the round's hands and discards left (Acrobat and
+    -- Dusk on the final hand, Banner, Mystic Summit) count the fight's, as in Balatro, not the
+    -- turn's share.
+    local evaluate_play = G.FUNCS.evaluate_play
+    G.FUNCS.evaluate_play = function(e)
+        local f = fight()
+        if not (f and f.blind_hands) then return evaluate_play(e) end
+        local round = G.GAME.current_round
+        local turn_hands, turn_discards = round.hands_left, round.discards_left
+        round.hands_left, round.discards_left = fight_left(true)
+        local ok, err = pcall(evaluate_play, e)
+        round.hands_left, round.discards_left = turn_hands, turn_discards
+        if not ok then error(err, 0) end
+    end
+
+    local calculate_joker = Card.calculate_joker
+    function Card:calculate_joker(context)
+        -- A turn's refill isn't the start of a round: round-start jokers (Certificate) act once a fight.
+        if context.first_hand_drawn and fight() and fight().first_drawn then return nil end
+        return dud_blind(self, calculate_joker, context)
+    end
+    local update = Card.update
+    function Card:update(dt)
+        return dud_blind(self, update, dt)
+    end
+    local ability_table = Card.generate_UIBox_ability_table
+    function Card:generate_UIBox_ability_table()
+        return dud_blind(self, ability_table)
+    end
+
+    -- A Boss Blind disabled mid-fight (Luchador sold, say) gives back what it took: The Needle's
+    -- hands and The Water's discards join the fight's totals (and so its turns), and StS2 sees the
+    -- blind's new chips (The Wall, Violet Vessel) and shrinks the enemies to match.
+    local disable = Blind.disable
+    function Blind:disable(...)
+        local out = disable(self, ...)
+        local f = fight()
+        if f and f.per_turn and f.blind_hands then
+            if self.name == 'The Needle' then f.blind_hands = f.blind_hands + (self.hands_sub or 0) end
+            if self.name == 'The Water' then f.blind_discards = f.blind_discards + (self.discards_sub or 0) end
+            f.per_turn = share_of(f.blind_hands, f.blind_discards)
+        end
+        return out
+    end
+
+    local status_text = card_eval_status_text
+    card_eval_status_text = function(card, eval_type, amt, percent, dir, extra)
+        if cashing and card and G.STATE == G.STATES.NEW_ROUND then
+            local ok, err = pcall(note_round_end, card, eval_type, amt, extra)
+            if not ok then log('end-of-round note failed: ' .. tostring(err)) end
+        end
+        return status_text(card, eval_type, amt, percent, dir, extra)
+    end
 
     -- The pack is closing: the cards a tarot just changed are about to go back to the deck.
     local end_consumeable = G.FUNCS.end_consumeable
@@ -817,7 +951,9 @@ local function install_rules()
                 cashing.total = config.dollars or 0
             else
                 local label
-                if config.name == 'blind1' then
+                if config.name == 'blind1' and config.saved then
+                    label = cards.loc('ph_mr_bones') or 'Saved by Mr. Bones'
+                elseif config.name == 'blind1' then
                     label = cards.loc({ type = 'name_text', set = 'Blind', key = G.GAME.blind.config.blind.key }) or 'Blind'
                 elseif config.name == 'hands' then
                     label = tostring(config.disp) .. ' ' .. (cards.loc('k_hands_left') or 'hands left')

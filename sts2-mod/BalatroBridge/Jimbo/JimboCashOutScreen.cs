@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using BalatroBridge.Core;
 using BalatroBridge.Table;
@@ -60,8 +61,12 @@ internal sealed class JimboCashOutScreen
 
     private async Task Run(CashOut cash)
     {
-        int rows = cash.Rows.Count;
-        float height = 230 + rows * 58;
+        // What the round's end paid (Gold Cards held, Rental) comes first, as Balatro pays it first.
+        var lines = cash.Paid.Select(p => (Label: p.Count > 1 ? $"{p.Label} x{p.Count}" : p.Label, p.Dollars))
+            .Concat(cash.Rows.Select(r => (r.Label, r.Dollars))).ToList();
+        int rows = lines.Count;
+        float notesHeight = cash.Notes.Count > 0 ? 12 + cash.Notes.Count * 30 : 0;
+        float height = 230 + rows * 58 + notesHeight;
         float top = 540 - height / 2;
         var panel = TableStyle.Panel(new Rect2(660, top, 600, height), TableStyle.Box(TableStyle.PanelFill, TableStyle.PanelEdge, 18, 3, 16));
         _stage.AddChild(panel);
@@ -77,15 +82,15 @@ internal sealed class JimboCashOutScreen
         float pitch = 0.95f;
         for (int i = 0; i < rows; i++)
         {
-            CashOutRow row = cash.Rows[i];
+            (string text, double amount) = lines[i];
             float y = 84 + i * 58;
-            Label label = TableStyle.Text(row.Label, 26, StsColors.cream, new Rect2(30, y, 380, 48), TableStyle.Regular, 6);
+            Label label = TableStyle.Text(text, 26, StsColors.cream, new Rect2(30, y, 380, 48), TableStyle.Regular, 6);
             label.HorizontalAlignment = HorizontalAlignment.Left;
-            // Balatro counts small payouts in dollar signs.
-            string money = row.Dollars is > 0 and <= 8 && row.Dollars == Math.Floor(row.Dollars)
-                ? new string('$', (int)row.Dollars)
-                : "$" + TableText.Number(row.Dollars);
-            Label dollars = TableStyle.Text(money, 30, TableStyle.Money, new Rect2(390, y, 180, 48));
+            // Balatro counts small payouts in dollar signs; a charge (Rental) is a red minus.
+            string money = amount is > 0 and <= 8 && amount == Math.Floor(amount)
+                ? new string('$', (int)amount)
+                : amount < 0 ? "-$" + TableText.Number(-amount) : "$" + TableText.Number(amount);
+            Label dollars = TableStyle.Text(money, 30, amount < 0 ? TableStyle.Mult : TableStyle.Money, new Rect2(390, y, 180, 48));
             dollars.HorizontalAlignment = HorizontalAlignment.Right;
             panel.AddChild(label);
             panel.AddChild(dollars);
@@ -95,7 +100,17 @@ internal sealed class JimboCashOutScreen
             await TableFx.Wait(0.28f);
         }
 
-        Button collect = TableStyle.Button($"Cash Out: ${TableText.Number(cash.Total)}", new Color("F3B958").Darkened(0.15f), new Rect2(110, height - 112, 380, 88), 34);
+        // What jokers and cards said as the round ended ("Gros Michel: Extinct!").
+        for (int i = 0; i < cash.Notes.Count; i++)
+        {
+            float y = 84 + rows * 58 + 6 + i * 30;
+            Label note = TableStyle.Text(cash.Notes[i], 20, new Color(StsColors.cream, 0.75f), new Rect2(30, y, 540, 30), TableStyle.Regular, 4);
+            note.HorizontalAlignment = HorizontalAlignment.Left;
+            panel.AddChild(note);
+        }
+
+        double total = cash.Total + cash.PaidTotal;
+        Button collect = TableStyle.Button($"Cash Out: ${TableText.Number(total)}", new Color("F3B958").Darkened(0.15f), new Rect2(110, height - 112, 380, 88), 34);
         collect.AddThemeColorOverride("font_color", TableStyle.Ink);
         collect.AddThemeColorOverride("font_hover_color", TableStyle.Ink);
         collect.AddThemeConstantOverride("outline_size", 0);

@@ -66,6 +66,17 @@ public abstract class JokerRelic : BalatroRelic
     }
 
     public override bool IsStackable => false;
+
+    // Mr. Bones in Jimbo's runs: Balatro's "prevents death" happens in StS2, as Lizard Tail's does
+    // (see JimboCombat.MrBonesWouldSave). Every other joker lets death be.
+    public override bool ShouldDieLate(Creature creature) =>
+        creature != Owner?.Creature || !JimboCombat.MrBonesWouldSave(this);
+
+    public override async Task AfterPreventingDeath(Creature creature)
+    {
+        Flash();
+        await JimboCombat.SavedByMrBones(Owner!, creature);
+    }
 }
 
 /// <summary>A Balatro voucher Jimbo has redeemed: a permanent rule for the rest of the run.</summary>

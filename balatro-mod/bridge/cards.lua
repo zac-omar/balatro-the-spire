@@ -99,15 +99,61 @@ local function line_text(parsed, vars)
     return table.concat(out)
 end
 
+-- A parsed part as it reads with its vars as placeholders ('+#1#' reads '+9').
+local function shape(part)
+    local out = {}
+    for _, sub in ipairs(part.strings) do out[#out + 1] = type(sub) == 'string' and sub or '9' end
+    return table.concat(out)
+end
+
+-- A coloured number, like '+15' or a boxed 'X3'.
+local function is_value(part)
+    local control = part.control or {}
+    return (control.C or control.X) and shape(part):match('^%s*[%+%-X%$]?%s*%d') ~= nil
+end
+
+-- Balatro breaks its text into short lines for its little tooltips and StS2 wraps text itself,
+-- so lines join with spaces, except where Balatro puts something new on a line of its own: a
+-- status line ("(Currently +7 Mult)"), small print, an animated warning (Mr. Bones' "self
+-- destructs"), or a second effect after a whole one ("+15 Mult", then "1 in 6 chance...").
+local function starts_new(parsed, previous)
+    local first = parsed[1]
+    if not first then return false end
+    if shape(first):match('^%s*%(') then return true end
+    local small = true
+    for _, part in ipairs(parsed) do
+        local scale = part.control and tonumber(part.control.s)
+        if not (scale and scale < 1) then small = false break end
+    end
+    if small then return true end
+    if #parsed == 1 and first.control and tostring(first.control.E) == '2' then return true end
+    if previous and #previous == 2 and is_value(previous[1]) and is_value(first) then
+        local unit = previous[2].control or {}
+        local word = shape(previous[2]):gsub(',%s*$', '')
+        return not (unit.C or unit.X) and not word:match('^%s*%S+%s+%S')
+    end
+    return false
+end
+
 -- A description in StS2 markup: Balatro's localized text for `set`/`key`, with `vars` filled in.
 function cards.text(set, key, vars)
     local group = G.localization.descriptions[set]
     local entry = group and group[key]
     if not (entry and entry.text_parsed) then return nil end
-    local lines = {}
-    for _, parsed in ipairs(entry.text_parsed) do lines[#lines + 1] = line_text(parsed, vars or {}) end
-    -- Balatro breaks its text into short lines for its little tooltips; StS2 wraps text itself.
-    return (table.concat(lines, ' '):gsub('  +', ' '))
+    local out, previous = {}, nil
+    for _, parsed in ipairs(entry.text_parsed) do
+        if previous then
+            if starts_new(parsed, previous) then
+                out[#out] = out[#out]:gsub(',%s*$', '') -- "+250 Chips," ends its clause here
+                out[#out + 1] = '\n'
+            else
+                out[#out + 1] = ' '
+            end
+        end
+        out[#out + 1] = line_text(parsed, vars or {})
+        previous = parsed
+    end
+    return (table.concat(out):gsub('  +', ' '):gsub(' *\n *', '\n'))
 end
 
 -- Runs `generate` (something that builds a card's tooltip) and returns the vars Balatro
@@ -126,6 +172,18 @@ local function captured_vars(key, generate)
     localize = original
     if not ok then return nil, err end
     return vars
+end
+
+-- A tag's text with Balatro's own values (a Speed Tag's payout so far, an Orbital Tag's hand),
+-- built the way the blind select builds it: for the blind it's skipped from, or for the
+-- collection with no blind. Building a Tag bumps two counters that only number tags; they're
+-- put back.
+function cards.tag_text(key, blind_type)
+    local tally, id = G.GAME.tag_tally, G.tagid
+    local ok, tag = pcall(Tag, key, blind_type == nil, blind_type)
+    local vars = ok and tag and captured_vars(key, function() tag:get_uibox_table({}) end) or nil
+    G.GAME.tag_tally, G.tagid = tally, id
+    return cards.text('Tag', key, vars or {})
 end
 
 local EDITION_KEYS = { foil = 'e_foil', holo = 'e_holo', polychrome = 'e_polychrome', negative = 'e_negative' }
@@ -290,11 +348,8 @@ function cards.catalog()
             text = cards.text('Stake', key, {}) }
     end
     for key, tag in pairs(G.P_TAGS) do
-        local vars
-        local ok, t = pcall(Tag, key, true)
-        if ok and t then vars = captured_vars(key, function() t:get_uibox_table({}) end) end
         items[key] = { set = 'Tag', name = loc({ type = 'name_text', set = 'Tag', key = key }) or tag.name,
-            text = cards.text('Tag', key, vars or {}) }
+            text = cards.tag_text(key) }
     end
     for key, blind in pairs(G.P_BLINDS) do
         items[key] = { set = 'Blind', name = loc({ type = 'name_text', set = 'Blind', key = key }) or blind.name,

@@ -99,6 +99,7 @@ internal static class JimboRun
             await SyncSingles<VoucherRelic>(player, table.Vouchers.ToHashSet());
             if (table.DeckKey != null) await SyncSingles<DeckRelic>(player, [table.DeckKey]);
             await JimboConsumables.Sync(player, table);
+            await JimboCombat.FollowBlind(player, table);
         }
         catch (Exception e)
         {
