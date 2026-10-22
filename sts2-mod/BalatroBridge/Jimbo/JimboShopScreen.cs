@@ -58,7 +58,7 @@ internal sealed class JimboShopScreen
     private readonly Control _items;
     private readonly BalatroArt _art = BalatroArt.Shared;
     private readonly Label _title;
-    private readonly Label _status;
+    private readonly RichTextLabel _status; // rich, so Jimbo's lines keep Balatro's colours
     private readonly Label _money;
     private readonly Label _ante;
     private readonly Label _turns;
@@ -127,7 +127,10 @@ internal sealed class JimboShopScreen
 
         _title = TableStyle.Text("SHOP", 60, ShopRed, new Rect2(700, 254, 600, 70), TableStyle.Title, 12);
         _stage.AddChild(_title);
-        _status = TableStyle.Text("", 26, StsColors.cream, new Rect2(460, 1010, 1000, 40));
+        _status = TableStyle.RichText("", 26);
+        _status.Position = new Vector2(460, 1010);
+        _status.Size = new Vector2(1000, 40);
+        _status.CustomMinimumSize = new Vector2(1000, 0);
         _stage.AddChild(_status);
         _items = new Control { Size = StageSize, MouseFilter = Control.MouseFilterEnum.Ignore };
         _stage.AddChild(_items);
@@ -159,8 +162,8 @@ internal sealed class JimboShopScreen
 
     public void SetStatus(string text, Color colour)
     {
-        _status.Text = text;
-        _status.LabelSettings.FontColor = colour;
+        _status.Text = TableStyle.Markup(text);
+        _status.AddThemeColorOverride("default_color", colour);
     }
 
     /// <summary>Waits for the player's next move in the shop (or the open pack).</summary>

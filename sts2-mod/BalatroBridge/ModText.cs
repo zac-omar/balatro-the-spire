@@ -93,7 +93,7 @@ internal static class ModText
         ["BALATRO_WILD_CARD.pages.INITIAL.options.LEAVE.description"] =
             "Leave.",
         ["BALATRO_WILD_CARD.pages.CATCH.description"] =
-            "Jimbo cackles, a sound like a deck being bridged.\n\n[gold]\"Catch? No catch! Well... one teeny one.\"[/gold] Every time you play that card, you play a hand of [gold]Balatro[/gold]: five cards, [blue]chips[/blue] times [red]mult[/red], [gold]jokers[/gold] bending every rule. [gold]\"The bigger the hand, the harder it hits. Beat a blind and my shop opens up.\"[/gold]\n\nHe leans over the felt. [sine]\"And between you and me, there's a house special.\"[/sine]",
+            "Jimbo cackles, a sound like a deck being bridged.\n\n[gold]\"Catch? No catch! Well... one teeny one.\"[/gold] Every time you play that card, you play a hand of [gold]Balatro[/gold]: five cards, [color=#009DFF]chips[/color] times [color=#FE5F55]mult[/color], [color=#FF9A00]jokers[/color] bending every rule. [gold]\"The bigger the hand, the harder it hits. Beat a blind and my shop opens up.\"[/gold]\n\nHe leans over the felt. [sine]\"And between you and me, there's a house special.\"[/sine]",
         ["BALATRO_WILD_CARD.pages.CATCH.options.DEAL.title"] =
             "\"Deal me in.\"",
         ["BALATRO_WILD_CARD.pages.CATCH.options.DEAL.description"] =
@@ -222,8 +222,12 @@ internal static class ModText
         table("relics")?.MergeWith(relics);
         table("potions")?.MergeWith(potions);
         table("characters")?.MergeWith(Characters);
-        table("characters")?.MergeWith(Jimbo.JimboQuips.Lines.ToDictionary(l => l.Key, l => l.Value));
-        table("events")?.MergeWith(Events);
-        table("ancients")?.MergeWith(JimboArchitect.Lines);
+        // What Jimbo says names Balatro's things in Balatro's colours (Mult red, Chips blue...).
+        table("characters")?.MergeWith(Jimbo.JimboQuips.Lines.ToDictionary(l => l.Key, l => BalatroTerms.Colour(l.Value)));
+        table("events")?.MergeWith(Events.ToDictionary(e => e.Key, e => JimboSpeaks.IsMatch(e.Key) ? BalatroTerms.ColourQuotes(e.Value) : e.Value));
+        table("ancients")?.MergeWith(JimboArchitect.Lines.ToDictionary(l => l.Key, l => l.Key.EndsWith(".char") ? BalatroTerms.Colour(l.Value) : l.Value));
     }
+
+    // A Wild Card's pages, where Jimbo's lines are the quoted parts (the options are the player's).
+    private static readonly System.Text.RegularExpressions.Regex JimboSpeaks = new(@"^BALATRO_WILD_CARD\.pages\.[A-Z_]+\.description$");
 }

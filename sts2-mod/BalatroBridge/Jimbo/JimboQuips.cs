@@ -118,7 +118,7 @@ internal static class JimboQuips
         // A Boss Blind gets its own line when Jimbo has one for it.
         if (moment == Moment.Boss && bossKey != null && BossLines.TryGetValue(bossKey, out string? line))
         {
-            ModText.SetLive("characters", LiveKey, line);
+            ModText.SetLive("characters", LiveKey, Content.BalatroTerms.Colour(line));
             Say(player, new LocString("characters", LiveKey), line);
             return;
         }
@@ -140,7 +140,7 @@ internal static class JimboQuips
         (string[] lines, float chance) = Quips[moment];
         if (GD.Randf() > chance) return;
         string line = lines[GD.RandRange(0, lines.Length - 1)];
-        screen.SetStatus($"Jimbo: \"{line}\"", StsColors.cream);
+        screen.SetStatus($"Jimbo: \"{Content.BalatroTerms.Colour(line)}\"", StsColors.cream);
         JimboSounds.Say(line);
     }
 }
