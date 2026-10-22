@@ -97,6 +97,8 @@ internal sealed class JimboHand
     private readonly CardTip _tip;
     private readonly CardDrag _drag;
     private readonly TurnFuse _fuse;
+    private readonly Panel _charge;
+    private int _charged = 1;
     private readonly Control? _endTurn;
     private readonly int _endTurnZ;
 
@@ -213,6 +215,11 @@ internal sealed class JimboHand
         _multBox.AddChild(_mult);
         foreach (Control c in new Control[] { _handName, _handLevel, _chipsBox, _multBox }) _plate.AddChild(c);
         _plate.AddChild(TableStyle.Text("X", 28, StsColors.cream, new Rect2(366, 8, 30, 46)));
+        // The Needle's charge, pinned to the corner of the Mult it multiplies.
+        _charge = TableStyle.Panel(new Rect2(470, -4, 64, 28), TableStyle.Box(StsColors.gold, new Color(1, 1, 1, 0.7f), 8, 2, 6));
+        _charge.AddChild(TableStyle.Text("", 19, TableStyle.Ink, new Rect2(0, 0, 64, 28), TableStyle.Bold, 0));
+        _charge.Visible = false;
+        _plate.AddChild(_charge);
         _status = TableStyle.Text("", 22, StsColors.red, new Rect2(HandX - 400, 760, 800, 34));
         _stage.AddChild(_status);
 
@@ -354,6 +361,7 @@ internal sealed class JimboHand
         _blindText.Text = TableStyle.Markup(rule, centred: false);
         _blindChip.Texture = _art.Sprite(blind?.Sprite);
         _hands.Text = table.HandsLeft.ToString();
+        ShowCharge(table.Charge);
         _discards.Text = table.DiscardsLeft.ToString();
         _money.Text = "$" + TableText.Number(table.Dollars);
         _ante.Text = $"Ante {table.Ante}/8";
@@ -647,6 +655,22 @@ internal sealed class JimboHand
         _turn.Text = limit > 0 ? $"Turn {turn}" : "";
         _turn.LabelSettings.FontColor = turn > limit && limit > 0 ? StsColors.red : new Color(StsColors.cream, 0.8f);
         _fuse.Show(turn, limit, strength);
+    }
+
+    // Charge the Needle: a held hand's Mult multiplier, glowing over the Mult box while it lasts.
+    private void ShowCharge(int charge)
+    {
+        if (charge == _charged) return;
+        bool grew = charge > _charged;
+        _charged = charge;
+        _charge.Visible = charge > 1;
+        if (charge <= 1) return;
+        ((Label)_charge.GetChild(0)).Text = $"x{charge}";
+        if (!grew) return;
+        TableFx.Juice(_charge, 0.3f);
+        TableFx.Juice(_multBox, 0.2f);
+        TableFx.Sound("chips1", 0.8f + 0.1f * charge, 0.5f);
+        TableFx.Embers(_plate, new Vector2(502, 10), 12 + 6 * charge, StsColors.gold);
     }
 
     public void ShowBlock(double chips)

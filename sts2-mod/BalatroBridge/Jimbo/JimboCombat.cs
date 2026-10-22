@@ -50,6 +50,10 @@ internal static class JimboCombat
     // Overtime: each turn past the blind's hands, the enemies gain this much more Strength than the last.
     private const int OvertimeStrength = 3;
 
+    // Charge the Needle: The Needle's one hand can be held for more Mult, so its Overtime (from
+    // turn 2) comes on faster.
+    private const int NeedleOvertimeStrength = 5;
+
     // Mr. Bones saves a lost round whose hands scored at least this share of the blind.
     private const double MrBonesShare = 0.25;
 
@@ -269,7 +273,8 @@ internal static class JimboCombat
         int turn = player.PlayerCombatState?.TurnNumber ?? 1;
         int limit = table.PerTurn?.Turns ?? 0;
         int over = turn - limit;
-        int strength = OvertimeStrength * Math.Max(over, 0);
+        int step = table.Blind is { Key: "bl_needle", Disabled: false } ? NeedleOvertimeStrength : OvertimeStrength;
+        int strength = step * Math.Max(over, 0);
         Hand?.ShowTurn(turn, limit, strength);
         if (limit <= 0 || over <= 0 || player.Creature.CombatState is not CombatState state) return false;
         foreach (Creature enemy in state.Enemies.Where(e => e.IsAlive).ToList())

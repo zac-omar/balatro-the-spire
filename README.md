@@ -80,6 +80,9 @@ last boss:
   them (4 turns at White Stake), the enemies gain Strength every turn, more each time. A fuse
   over the fight's panel burns down a notch a turn until it does. Jokers for Balatro's final
   hand (Dusk, Acrobat) work in Overtime.
+- **Boss blinds** work as in Balatro, a few with StS2 twists: The Needle's one hand charges
+  while you hold it (x2, x3, x4 Mult) but its Overtime comes on turn 2, and faster; The Eye
+  bars only the hand types of your last 3 turns.
 - **A hand that dwarfs its target catches fire**, and so does Jimbo.
 - **Jokers are relics** and light up in the relic bar as they score, left to right. Drag one to a
   new place, or right-click it to sell it (in the shop, drag or click it). Status cards enemies hand out land in

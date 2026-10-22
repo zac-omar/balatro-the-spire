@@ -358,6 +358,9 @@ public sealed record TableSnapshot(
     /// <summary>How interest pays at the cash-out; null when it doesn't (Green Deck, say).</summary>
     public InterestRule? Interest { get; init; }
 
+    /// <summary>The Needle's charge in Jimbo's fights: the next hand's Mult multiplier (1 when uncharged).</summary>
+    public int Charge { get; init; } = 1;
+
     /// <summary>After a discard: the chips on the cards thrown away (Jimbo's block).</summary>
     public double DiscardedChips { get; init; }
 
@@ -415,6 +418,7 @@ public sealed record TableSnapshot(
             WonRun = BalatroState.Bool(t["won_run"]),
             Tags = t["tags"] is JsonArray g ? g.OfType<JsonObject>().Select(o => BalatroState.Str(o["key"])).OfType<string>().ToList() : [],
             OwnedTags = t["tags"] is JsonArray owned ? owned.Select(TagInfo.FromJson).OfType<TagInfo>().ToList() : [],
+            Charge = BalatroState.Int(t["charge"]) ?? 1,
             Interest = t["interest"] is JsonObject rule && !BalatroState.Bool(rule["off"])
                 ? new InterestRule(BalatroState.Num(rule["amount"]) ?? 1, BalatroState.Num(rule["cap"]) ?? 25)
                 : null,

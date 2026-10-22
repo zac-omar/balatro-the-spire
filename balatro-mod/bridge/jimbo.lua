@@ -140,6 +140,9 @@ local function extend_snapshot(snap, used)
         }
     end
     snap.tags = tags
+    -- The Needle's charge (Jimbo's fights): the next hand's Mult multiplier, from 1.
+    local f = fight()
+    snap.charge = f and f.needle_charge and f.needle_charge > 0 and (1 + f.needle_charge) or nil
     -- The road ahead, for Jimbo's map: this ante's three blinds (its Boss Blind is already
     -- chosen) and every ante's base chips.
     local antes = {}
@@ -328,6 +331,32 @@ local function in_overtime()
     return f and f.turn and f.per_turn and f.per_turn.turns and f.turn > f.per_turn.turns or false
 end
 
+-- Charge the Needle (Jimbo's fights): The Needle gives the blind one hand, so Overtime comes on
+-- turn 2, and faster (JimboCombat). Its one hand can be held: each turn that ends without a hand
+-- played charges the next one, x2, x3, then x4 Mult on its base. Playing a hand spends the charge.
+local NEEDLE_MAX = 3
+local function needle_live()
+    local b = G.GAME.blind
+    return b and b.name == 'The Needle' and not b.disabled and fight() and fight().blind_hands and true or false
+end
+
+local function charge_needle()
+    local f = fight()
+    if not needle_live() then
+        f.needle_charge = nil
+        return
+    end
+    local played = G.GAME.current_round.hands_played
+    -- Turn 1 has no turn before it to have held.
+    if (f.turn or 1) > 1 and (f.needle_played or 0) == played then f.needle_charge = math.min((f.needle_charge or 0) + 1, NEEDLE_MAX) end
+    f.needle_played = played
+end
+
+local function needle_multiplier()
+    local f = fight()
+    return needle_live() and f.needle_charge and f.needle_charge > 0 and (1 + f.needle_charge) or 1
+end
+
 local function fight_left(scoring)
     local f, round = fight(), G.GAME.current_round
     local hands = math.max(0, (f.blind_hands or 0) - round.hands_played - (scoring and 1 or 0))
@@ -451,6 +480,7 @@ local function on_turn(data, msg)
             return nil
         end
         fight().turn = tonumber(data.turn) or ((fight().turn or 1) + 1)
+        charge_needle()
         start_turn()
         adjust_turn(data)
         return reply_state()
@@ -977,21 +1007,41 @@ local function install_rules()
         local hands
         hands, round.discards_left = fight_left(true)
         round.hands_left = in_overtime() and 0 or math.max(1, hands)
-        local bonus, added = dealer.play_bonus(), {}
-        if bonus and (bonus.mult ~= 0 or bonus.chips ~= 0) then
+        local bonus, charge, saved = dealer.play_bonus(), needle_multiplier(), {}
+        if (bonus and (bonus.mult ~= 0 or bonus.chips ~= 0)) or charge > 1 then
             for key, hand in pairs(G.GAME.hands) do
-                local mult, chips = math.max(bonus.mult, 1 - hand.mult), math.max(bonus.chips, -hand.chips)
-                hand.mult, hand.chips = hand.mult + mult, hand.chips + chips
-                added[key] = { mult, chips }
+                saved[key] = { hand.mult, hand.chips }
+                if bonus then
+                    hand.mult = hand.mult + math.max(bonus.mult, 1 - hand.mult)
+                    hand.chips = hand.chips + math.max(bonus.chips, -hand.chips)
+                end
+                hand.mult = hand.mult * charge
             end
         end
         local ok, err = pcall(evaluate_play, e)
-        for key, d in pairs(added) do
+        for key, was in pairs(saved) do
             local hand = G.GAME.hands[key]
-            hand.mult, hand.chips = hand.mult - d[1], hand.chips - d[2]
+            hand.mult, hand.chips = was[1], was[2]
         end
+        -- The Needle's charge is spent on this hand.
+        if charge > 1 then f.needle_charge = 0 end
         round.hands_left, round.discards_left = turn_hands, turn_discards
         if not ok then error(err, 0) end
+    end
+
+    local needle_text = Blind.get_loc_debuff_text
+    function Blind:get_loc_debuff_text()
+        if self.name ~= 'The Needle' or not needle_live() then return needle_text(self) end
+        local m = needle_multiplier()
+        return 'Play only 1 hand. Each turn you hold it: x2, x3, x4 Mult' .. (m > 1 and (' [now x' .. m .. ']') or '')
+    end
+    dealer.preview_hook = function(out, key)
+        local m = needle_multiplier()
+        if m > 1 and type(out.mult) == 'number' then
+            out.mult = out.mult * m
+            out.charge = m
+        end
+        return out
     end
 
     -- Their words follow: "while in Overtime" for "final hand of round".

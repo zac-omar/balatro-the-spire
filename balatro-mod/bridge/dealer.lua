@@ -329,6 +329,8 @@ local function preview(selection)
             out.warn = 'It costs $' .. #selection
         end
     end
+    -- A mode's own change to the hand's base (Jimbo's charged Needle, bridge/jimbo.lua).
+    if dealer.preview_hook then out = dealer.preview_hook(out, key) end
     return out
 end
 dealer.preview = preview
