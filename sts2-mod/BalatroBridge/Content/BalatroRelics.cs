@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Rewards;
@@ -77,6 +78,17 @@ public abstract class JokerRelic : BalatroRelic
     public override bool ShowCounter => LiveValue != null;
 
     public override int DisplayAmount => int.TryParse(new string((LiveValue ?? "").Where(char.IsDigit).ToArray()), out int n) ? n : 0;
+
+    /// <summary>The loc entry of a face-down joker's title (ModText adds it).</summary>
+    internal const string FaceDownEntry = "BALATRO_FACE_DOWN_JOKER";
+
+    /// <summary>
+    /// Flipped face down (Amber Acorn): the relic hides which joker it is, as Balatro's card does,
+    /// until the fight ends. It still scores.
+    /// </summary>
+    internal bool FaceDown { get; set; }
+
+    public override LocString Title => FaceDown ? new LocString("relics", FaceDownEntry + ".title") : base.Title;
 
     internal void SetLive(string? value)
     {

@@ -42,6 +42,7 @@ internal static class JimboRelicBar
     {
         NRelicInventory? inventory = NRun.Instance?.GlobalUi.RelicInventory;
         if (inventory == null) return;
+        ShowFaces(inventory, table);
         foreach (NRelicInventoryHolder holder in inventory.RelicNodes)
         {
             if (!GodotObject.IsInstanceValid(holder) || holder.HasMeta(Hooked) || holder.Relic?.Model is not JokerRelic) continue;
@@ -55,6 +56,25 @@ internal static class JimboRelicBar
             };
         }
     }
+
+    // A joker flipped face down (Amber Acorn) shows the deck's back, as Balatro's card does.
+    private static void ShowFaces(NRelicInventory inventory, TableSnapshot table)
+    {
+        BalatroArt.Shared.Learn(table);
+        Texture2D? back = BalatroArt.Shared.Sprite(table.Back);
+        foreach (NRelicInventoryHolder holder in inventory.RelicNodes)
+        {
+            if (!GodotObject.IsInstanceValid(holder) || holder.Relic?.Model is not JokerRelic joker || holder.Relic.Icon == null) continue;
+            bool down = joker.FaceDown && back != null;
+            if (down == holder.HasMeta(FaceDownMeta)) continue;
+            holder.Relic.Icon.Texture = down ? back : joker.Icon;
+            holder.Relic.Outline.Visible = !down;
+            if (down) holder.SetMeta(FaceDownMeta, true);
+            else holder.RemoveMeta(FaceDownMeta);
+        }
+    }
+
+    private const string FaceDownMeta = "balatro_face_down";
 
     // Dragging ------------------------------------------------------------------------------------
 

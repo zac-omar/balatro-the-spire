@@ -15,6 +15,8 @@ internal static class BalatroText
 
     public static string For(BalatroRelic relic)
     {
+        // A joker the Amber Acorn flipped: nothing about it shows, as on Balatro's face-down card.
+        if (relic is JokerRelic { FaceDown: true }) return "Flipped face down by the [red]Amber Acorn[/red].\nIt still scores, in its place.";
         string text = (relic.IsMutable ? relic.LiveText : null) ?? BalatroCatalog.Text(relic.BalatroKey) ?? Fallback(relic.Item);
         if (relic is StakeRelic) text = StakeText(relic.BalatroKey, text);
         // Balatro's rarity badge, in its colour.

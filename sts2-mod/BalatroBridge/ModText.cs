@@ -182,6 +182,7 @@ internal static class ModText
             // A joker's rarity is in its text, in Balatro's colours (BalatroText), so no flavor line repeats it.
             relics[entry + ".flavor"] = item.Set == "Joker" ? "" : Flavors.GetValueOrDefault(item.Set, "");
         }
+        relics[JokerRelic.FaceDownEntry + ".title"] = "Face-down Joker";
         return (relics, potions);
     }
 
