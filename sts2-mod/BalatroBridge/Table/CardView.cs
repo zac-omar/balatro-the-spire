@@ -23,7 +23,9 @@ internal sealed class CardView
         uniform int edition = 0;
         uniform float seed = 0.0;
         void fragment() {
-            vec4 c = texture(TEXTURE, UV) * COLOR;
+            // Godot's COLOR comes in already multiplied by the texture: sampling it again would
+            // square the art's colours (yellows go orange).
+            vec4 c = COLOR;
             float t = TIME * 0.7 + seed;
             float band = sin((UV.x * 4.0 + UV.y * 6.0) * 3.14159 + t * 2.2) * 0.5 + 0.5;
             if (edition == 1) {

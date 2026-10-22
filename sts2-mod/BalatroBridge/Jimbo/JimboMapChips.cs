@@ -41,7 +41,7 @@ internal static class JimboMapChips
             shader_type canvas_item;
             uniform vec4 initial_color : source_color;
             uniform vec4 map_color : source_color;
-            void fragment() { COLOR = texture(TEXTURE, UV) * COLOR; }
+            void fragment() { } // COLOR is already the texture times the modulate
             """,
     };
 
