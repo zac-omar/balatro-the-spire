@@ -322,8 +322,8 @@ internal static class JimboCombat
             ScoredHand scored = await session.PlayCards(ids, strength, vigor);
             if (vigor > 0) await JimboRosetta.Spent(player);
             await moveToPlay;
-            decimal damage = (decimal)Math.Min(Math.Max(scored.Score, 0), (double)MaxHp);
-            if (double.IsNaN(scored.Score)) damage = 0;
+            // NaN first: converting it to a decimal throws (an infinite score is just capped).
+            decimal damage = double.IsNaN(scored.Score) ? 0 : (decimal)Math.Min(Math.Max(scored.Score, 0), (double)MaxHp);
             Creature? target = await TargetFor(player, targetId);
             // A hand that dwarfs what it's thrown at catches fire, and so does Jimbo.
             float fire = JimboFire.Heat(damage, target);
