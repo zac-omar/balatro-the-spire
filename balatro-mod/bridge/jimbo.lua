@@ -761,11 +761,16 @@ local function on_move_joker(data, msg)
     end)
 end
 
--- StS2 took or gave money (a thief, say): Balatro's dollars follow.
+-- StS2 took or gave money (a thief, say): Balatro's dollars follow, saved at once where Balatro
+-- itself saves, so quitting before Balatro's next save doesn't lose them.
 local function on_dollars(data, msg)
     link_from(data)
     local delta = tonumber(data.delta) or 0
-    if delta ~= 0 then ease_dollars(delta, true) end
+    if delta ~= 0 then
+        ease_dollars(delta, true)
+        local s = G.STATE
+        if dealer.in_linked_run() and (s == G.STATES.SHOP or s == G.STATES.BLIND_SELECT or s == G.STATES.SELECTING_HAND) then save_run() end
+    end
     if msg.id then send('ack', { dollars = G.GAME.dollars }, msg.id) end
 end
 
