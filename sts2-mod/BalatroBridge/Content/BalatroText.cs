@@ -21,9 +21,9 @@ internal static class BalatroText
         if (relic is JokerRelic) text += "\n" + Rarity(relic.Item.Rarity);
         if (relic is JokerRelic { IsMutable: true } joker)
         {
-            // Jimbo's own jokers can be sold or moved from the relic bar (JimboRelicBar); one on
+            // Jimbo's own jokers can be moved or sold from the relic bar (JimboRelicBar); one on
             // offer to him (the Dealer's) is just a joker; anyone else's only plays in Deal In's hands.
-            if (Jimbo.JimboRun.IsJimbo(joker.Owner)) text += "\n[color=#9aa0a6]Right-click to sell or move.[/color]";
+            if (Jimbo.JimboRun.IsJimbo(joker.Owner)) text += "\n[color=#9aa0a6]Drag to move. Right-click to sell.[/color]";
             else if (joker.Owner != null || Jimbo.JimboRun.Me() == null) text += "\n[color=#9aa0a6]Only affects [gold]Deal In[/gold].[/color]";
         }
         return text;
