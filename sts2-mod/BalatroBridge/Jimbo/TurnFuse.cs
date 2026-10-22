@@ -6,14 +6,15 @@ using MegaCrit.Sts2.Core.Helpers;
 namespace BalatroBridge.Jimbo;
 
 /// <summary>
-/// The turns before Overtime, as a lit fuse over the fight's panel: a notch for each turn the
+/// The turns before Overtime, as a lit fuse under StS2's End Turn button, on the felt (above it,
+/// the fight's creatures and their health bars can stand anywhere): a notch for each turn the
 /// blind's hands last, the spark at this turn, and Overtime waiting at the end. The fuse burns down
 /// a notch a turn; on the last safe turn the spark flares and the label warns; when it reaches the
 /// end, Overtime goes off: the cap burns red with what the enemies gain, and the word lands big.
 /// </summary>
 internal sealed class TurnFuse
 {
-    private const float Left = 30, Right = 250, Y = 784;
+    private const float Left = 1626, Right = 1764, Y = 1022;
     private static readonly Color Rope = new("D9B26F");
     private static readonly Color RopeEdge = new("3A2A18");
     private static readonly Color Burnt = new("3B3530");
@@ -86,7 +87,8 @@ internal sealed class TurnFuse
         flicker.TweenProperty(_spark, "scale", Vector2.One * 1.15f, 0.12).SetTrans(Tween.TransitionType.Sine);
         flicker.TweenProperty(_spark, "scale", Vector2.One * 0.9f, 0.14).SetTrans(Tween.TransitionType.Sine);
 
-        _label = TableStyle.Text("", 21, StsColors.cream, new Rect2(Left - 4, Y - 44, 350, 28), TableStyle.Bold, 6);
+        // Clear of the Discard and Suit buttons to its left, and the screen's edge to its right.
+        _label = TableStyle.Text("", 18, StsColors.cream, new Rect2(Left - 20, Y - 52, 290, 28), TableStyle.Bold, 6);
         _label.HorizontalAlignment = HorizontalAlignment.Left;
         _root.AddChild(_label);
     }

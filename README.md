@@ -78,7 +78,7 @@ last boss:
   Each turn has its share of the blind's hands and discards and ends when its hands run out.
 - **Overtime**: a blind gives its hands and no more, as in Balatro. Once your turns have used
   them (4 turns at White Stake), the enemies gain Strength every turn, more each time. A fuse
-  over the fight's panel burns down a notch a turn until it does. Jokers for Balatro's final
+  under the End Turn button burns down a notch a turn until it does. Jokers for Balatro's final
   hand (Dusk, Acrobat) work in Overtime.
 - **Boss blinds** work as in Balatro, a few with StS2 twists: The Needle's one hand charges
   while you hold it (x2, x3, x4 Mult) but its Overtime comes on turn 2, and faster; The Eye
