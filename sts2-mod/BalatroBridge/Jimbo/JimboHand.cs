@@ -537,7 +537,7 @@ internal sealed class JimboHand
             _handLevel.Text = "";
             _chips.Text = "0";
             _mult.Text = "0";
-            if (_status.Text == "Not allowed by the boss blind!") SetStatus("", StsColors.cream);
+            ClearBossLine();
             return;
         }
         bool changed = _handName.Text != preview.Hand;
@@ -546,9 +546,28 @@ internal sealed class JimboHand
         _handLevel.Text = preview.Level.Length > 0 ? "lvl." + preview.Level : "";
         _chips.Text = preview.Chips;
         _mult.Text = preview.Mult;
-        if (!preview.Allowed) SetStatus("Not allowed by the boss blind!", StsColors.red);
-        else if (_status.Text == "Not allowed by the boss blind!") SetStatus("", StsColors.cream);
+        // As Balatro does: a hand the boss would refuse says so before it's played ("Hand will not
+        // score" and the boss's rule) and the blind's chip twitches; a hand it would punish says how.
+        if (preview.BossLine is string line)
+        {
+            if (line != _bossLine)
+            {
+                TableFx.Juice(_blindChip, 0.15f);
+                TableFx.Sound("chips1", 0.55f + 0.1f * GD.Randf(), 0.3f);
+            }
+            _bossLine = line;
+            SetStatus(line, preview.Allowed ? StsColors.gold : StsColors.red);
+        }
+        else ClearBossLine();
         if (changed) TableFx.Juice(_handName, 0.12f);
+    }
+
+    private string? _bossLine;
+
+    private void ClearBossLine()
+    {
+        if (_bossLine != null && _status.Text == _bossLine) SetStatus("", StsColors.cream);
+        _bossLine = null;
     }
 
     // Targeting --------------------------------------------------------------------------------

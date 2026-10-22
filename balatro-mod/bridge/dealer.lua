@@ -312,8 +312,24 @@ local function preview(selection)
     local key, name, poker_hands = G.FUNCS.get_poker_hand_info(selection)
     if key == 'NULL' then return { hand = '', chips = 0, mult = 0, allowed = true } end
     local stats = G.GAME.hands[key]
-    local blocked = G.GAME.blind and G.GAME.blind:debuff_hand(selection, poker_hands, key, true)
-    return { key = key, hand = name, level = stats.level, chips = stats.chips, mult = stats.mult, allowed = not blocked }
+    local blind = G.GAME.blind
+    local blocked = blind and blind:debuff_hand(selection, poker_hands, key, true)
+    local out = { key = key, hand = name, level = stats.level, chips = stats.chips, mult = stats.mult, allowed = not blocked }
+    if blocked then
+        -- Balatro's warning over the play area: "Hand will not score", and the boss's rule.
+        local rule = blind.get_loc_debuff_text and blind:get_loc_debuff_text() or blind.loc_debuff_text or ''
+        out.reason = rule:gsub('%s+', ' '):gsub('^ ', ''):gsub(' $', '')
+    elseif blind and not blind.disabled then
+        -- What a boss does to a hand it lets through, said before it's played.
+        if blind.name == 'The Ox' and key == G.GAME.current_round.most_played_poker_hand then
+            out.warn = 'Playing it sets your money to $0'
+        elseif blind.name == 'The Arm' and stats.level > 1 then
+            out.warn = 'It loses a level'
+        elseif blind.name == 'The Tooth' then
+            out.warn = 'It costs $' .. #selection
+        end
+    end
+    return out
 end
 dealer.preview = preview
 

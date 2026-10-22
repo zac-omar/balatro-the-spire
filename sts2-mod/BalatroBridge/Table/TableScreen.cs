@@ -549,7 +549,8 @@ internal sealed partial class TableScreen
         _handLevel.Text = preview.Level.Length > 0 ? "lvl." + preview.Level : "";
         _chips.Text = preview.Chips;
         _mult.Text = preview.Mult;
-        SetStatus(preview.Allowed ? "" : "Not allowed by the boss blind!", StsColors.red);
+        // As Balatro does: why a boss refuses the hand, or what it will cost.
+        SetStatus(preview.BossLine ?? "", preview.Allowed ? StsColors.gold : StsColors.red);
         if (changed) Juice(_handName, 0.12f);
     }
 

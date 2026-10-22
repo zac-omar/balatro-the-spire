@@ -426,6 +426,12 @@ public sealed record TableSnapshot(
 /// <summary>Which poker hand the selected cards make, before jokers.</summary>
 public sealed record HandPreview(string Hand, string Level, string Chips, string Mult, bool Allowed)
 {
+    /// <summary>The boss blind's rule a refused hand breaks (Balatro shows it under "Hand will not score").</summary>
+    public string? Reason { get; init; }
+
+    /// <summary>What the boss blind does to this hand if it's played (The Ox, The Arm, The Tooth).</summary>
+    public string? Warn { get; init; }
+
     public bool IsEmpty => Hand.Length == 0;
 
     public static HandPreview FromJson(JsonObject p) => new(
@@ -433,7 +439,14 @@ public sealed record HandPreview(string Hand, string Level, string Chips, string
         TableText.Display(p["level"]),
         TableText.Display(p["chips"]),
         TableText.Display(p["mult"]),
-        p["allowed"] is not JsonValue v || !v.TryGetValue(out bool allowed) || allowed);
+        p["allowed"] is not JsonValue v || !v.TryGetValue(out bool allowed) || allowed)
+    {
+        Reason = BalatroState.Str(p["reason"]),
+        Warn = BalatroState.Str(p["warn"]),
+    };
+
+    /// <summary>The line to show for the boss blind, if it has anything to say about this hand.</summary>
+    public string? BossLine => !Allowed ? "Hand will not score" + (Reason is { Length: > 0 } r ? ": " + r : "") : Warn;
 }
 
 /// <summary>After selecting cards in Jimbo's hand: the poker hand, and which consumables can be used on them.</summary>
