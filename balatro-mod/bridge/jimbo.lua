@@ -321,6 +321,13 @@ end
 -- round's: its totals less what's been played and discarded, never below 0. A fight whose turns
 -- get no discards has none to use, so none are left. A hand that's scoring counts as played
 -- (Balatro only counts it once it has scored).
+-- Overtime: the fight's turns have outlasted the blind's hands (StS2 counts the turns, see
+-- on_turn); from then on the enemies grow stronger every turn.
+local function in_overtime()
+    local f = fight()
+    return f and f.turn and f.per_turn and f.per_turn.turns and f.turn > f.per_turn.turns or false
+end
+
 local function fight_left(scoring)
     local f, round = fight(), G.GAME.current_round
     local hands = math.max(0, (f.blind_hands or 0) - round.hands_played - (scoring and 1 or 0))
@@ -421,6 +428,7 @@ local function on_blind(data, msg)
             f.blind_hands, f.blind_discards = round.hands_left, round.discards_left
             f.per_turn = share_of(round.hands_left, round.discards_left)
             f.first_drawn = true -- the fight's hand is dealt; later refills aren't a round start
+            f.turn = 1
         end
         start_turn()
         return reply_state()
@@ -441,6 +449,7 @@ local function on_turn(data, msg)
             G.STATE_COMPLETE = false
             return nil
         end
+        fight().turn = tonumber(data.turn) or ((fight().turn or 1) + 1)
         start_turn()
         adjust_turn(data)
         return reply_state()
@@ -937,9 +946,9 @@ local function install_rules()
     dealer.end_round_override = end_round_override
     dealer.in_combat = in_combat
 
-    -- While a hand scores, jokers that count the round's hands and discards left (Acrobat and
-    -- Dusk on the final hand, Banner, Mystic Summit) count the fight's, as in Balatro, not the
-    -- turn's share.
+    -- While a hand scores, jokers that count the round's discards left (Banner, Mystic Summit)
+    -- count the fight's, as in Balatro, not the turn's share. Acrobat and Dusk ("final hand of
+    -- round") work while the fight is in Overtime: no hands are left then, and some are before.
     -- The Rosetta Stone: Jimbo's StS2 Strength is Mult and his Vigor is Chips, added to the hand's
     -- base before anything else scores (so jokers' xMult multiplies them too). A hand's base Mult
     -- never drops below 1.
@@ -949,7 +958,9 @@ local function install_rules()
         if not (f and f.blind_hands) then return evaluate_play(e) end
         local round = G.GAME.current_round
         local turn_hands, turn_discards = round.hands_left, round.discards_left
-        round.hands_left, round.discards_left = fight_left(true)
+        local hands
+        hands, round.discards_left = fight_left(true)
+        round.hands_left = in_overtime() and 0 or math.max(1, hands)
         local bonus, added = dealer.play_bonus(), {}
         if bonus and (bonus.mult ~= 0 or bonus.chips ~= 0) then
             for key, hand in pairs(G.GAME.hands) do
@@ -965,6 +976,13 @@ local function install_rules()
         end
         round.hands_left, round.discards_left = turn_hands, turn_discards
         if not ok then error(err, 0) end
+    end
+
+    -- Their words follow: "while in Overtime" for "final hand of round".
+    local OVERTIME_WORDS = { j_dusk = true, j_acrobat = true }
+    cards.words = function(key, text)
+        if not (OVERTIME_WORDS[key] and dealer.jimbo_mode()) then return text end
+        return (text:gsub('[io]n %[orange%]final%[/orange%]%s+%[orange%]hand%[/orange%] of round', 'while in [orange]Overtime[/orange]'))
     end
 
     local calculate_joker = Card.calculate_joker

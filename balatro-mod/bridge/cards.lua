@@ -342,6 +342,8 @@ function cards.card_info(card, used, describe)
             local vars
             info.text, vars = cards.describe(card)
             if card.ability.set == 'Joker' then info.live = cards.live_value(center.key, vars) end
+            -- A mode's own words for a card (Jimbo's fights, bridge/jimbo.lua).
+            if cards.words and info.text then info.text = cards.words(center.key, info.text) end
         end
         info.sell = card.sell_cost
         info.eternal = card.ability.eternal or nil

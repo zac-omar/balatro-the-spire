@@ -228,6 +228,8 @@ internal static class JimboCombat
         try
         {
             (System.Text.Json.Nodes.JsonObject rosetta, string? said) = JimboRosetta.Turn(player);
+            // Balatro knows Overtime by it (Dusk and Acrobat work then).
+            rosetta["turn"] = player.PlayerCombatState?.TurnNumber ?? 1;
             TableSnapshot table = await JimboRun.Session().JimboTurn(JimboRun.LinkFor(player), rosetta);
             await JimboRun.Apply(player, table);
             if (Hand is JimboHand hand)
