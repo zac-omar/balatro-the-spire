@@ -24,6 +24,8 @@ internal sealed class BalatroAudio
     public enum Track
     {
         Main = 0,
+        Pack = 1, // Arcana, Spectral, Standard and Buffoon packs
+        Celestial = 2, // Celestial packs
         Shop = 3,
         Boss = 4,
     }

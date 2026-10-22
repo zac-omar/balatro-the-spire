@@ -40,6 +40,16 @@ internal sealed class BalatroArt
         return texture;
     }
 
+    /// <summary>
+    /// The first frame of one of Balatro's animation strips (the shop sign, say), in the run's
+    /// texture scale. It's a fresh texture: move its Region along the strip to animate it.
+    /// </summary>
+    public AtlasTexture? Strip(string file, int cellWidth, int cellHeight)
+    {
+        Texture2D? sheet = Sheet($"resources/textures/{_scale}x/{file}");
+        return sheet == null ? null : new AtlasTexture { Atlas = sheet, Region = new Rect2(0, 0, cellWidth * _scale, cellHeight * _scale), FilterClip = true };
+    }
+
     private Texture2D? Sheet(string relativePath)
     {
         if (_sheets.TryGetValue(relativePath, out Texture2D? sheet)) return sheet;

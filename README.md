@@ -80,7 +80,7 @@ last boss:
   them (4 turns at White Stake), the enemies gain Strength every turn, more each time.
 - **A hand that dwarfs its target catches fire**, and so does Jimbo.
 - **Jokers are relics** and light up in the relic bar as they score, left to right. Drag one to a
-  new place, or right-click it to sell it (in the shop, click it). Status cards enemies hand out land in
+  new place, or right-click it to sell it (in the shop, drag or click it). Status cards enemies hand out land in
   his deck as dead cards. Hover any card to see what it does.
 - **The deck button** in the top bar shows his deck and, as Balatro's Run Info does, every poker
   hand's level, chips × mult and times played. In the shop, it's the Run Info button.
