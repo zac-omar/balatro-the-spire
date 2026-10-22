@@ -347,6 +347,12 @@ function cards.card_info(card, used, describe)
         info.eternal = card.ability.eternal or nil
         info.perishable = card.ability.perishable and (card.ability.perish_tally or 0) or nil
         info.rental = card.ability.rental or nil
+        -- The stake stickers, as Balatro draws them on the card (stickers.png).
+        local stickers = {}
+        if info.eternal then stickers[#stickers + 1] = sprite('stickers', { x = 0, y = 0 }, used) end
+        if info.perishable then stickers[#stickers + 1] = sprite('stickers', { x = 0, y = 2 }, used) end
+        if info.rental then stickers[#stickers + 1] = sprite('stickers', { x = 1, y = 2 }, used) end
+        if #stickers > 0 then info.stickers = stickers end
     end
     return info
 end

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -77,6 +78,17 @@ public sealed record TableCard(
     /// <summary>The Cerulean Bell's card: always selected, and it can't be put back.</summary>
     public bool Forced { get; init; }
 
+    /// <summary>
+    /// The stake stickers drawn on a joker (eternal, perishable, rental) as cells of Balatro's
+    /// stickers sheet ("0,0|0,2"). Kept as text so cards compare by value.
+    /// </summary>
+    public string Stickers { get; init; } = "";
+
+    public IEnumerable<SpriteRef> StickerSprites() =>
+        Stickers.Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .Select(cell => cell.Split(','))
+            .Select(xy => new SpriteRef("stickers", int.Parse(xy[0]), int.Parse(xy[1])));
+
     public bool IsJoker => Set == "Joker";
 
     public bool IsConsumable => Set is "Tarot" or "Planet" or "Spectral";
@@ -113,6 +125,9 @@ public sealed record TableCard(
         Pile = BalatroState.Str(c["pile"]),
         Dud = BalatroState.Int(c["dud"]),
         Forced = BalatroState.Bool(c["forced"]),
+        Stickers = c["stickers"] is JsonArray stickers
+            ? string.Join("|", stickers.OfType<JsonObject>().Select(o => $"{BalatroState.Int(o["x"]) ?? 0},{BalatroState.Int(o["y"]) ?? 0}"))
+            : "",
         Suits = c["suits"] is JsonArray suits ? string.Join(",", suits.Select(BalatroState.Str).OfType<string>()) : "",
     };
 

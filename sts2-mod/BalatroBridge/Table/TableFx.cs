@@ -50,6 +50,40 @@ internal static class TableFx
         t.TweenProperty(stage, "position", home, 0.05);
     }
 
+    /// <summary>
+    /// Balatro's materialize and dissolve particles: little squares in the card's colour that
+    /// drift off it while it burns in or away.
+    /// </summary>
+    public static void Motes(Node parent, Vector2 at, Vector2 area, Color colour, float seconds)
+    {
+        var motes = new CpuParticles2D
+        {
+            Position = at,
+            Amount = 22,
+            Lifetime = Math.Max(0.3, seconds * 0.7) / Speed,
+            OneShot = true,
+            Explosiveness = 0.35f,
+            Direction = Vector2.Up,
+            Spread = 180,
+            Gravity = Vector2.Zero,
+            InitialVelocityMin = 30,
+            InitialVelocityMax = 110,
+            ScaleAmountMin = 4,
+            ScaleAmountMax = 8,
+            Color = colour,
+            EmissionShape = CpuParticles2D.EmissionShapeEnum.Rectangle,
+            EmissionRectExtents = area * 0.42f,
+            ZIndex = 1,
+        };
+        var fade = new Gradient();
+        fade.SetColor(0, Colors.White);
+        fade.SetColor(1, new Color(1, 1, 1, 0));
+        motes.ColorRamp = fade;
+        parent.AddChild(motes);
+        motes.Emitting = true;
+        motes.Finished += motes.QueueFree;
+    }
+
     /// <summary>A burst of square, Balatro-style pixel embers.</summary>
     public static void Embers(Node parent, Vector2 at, int amount, Color colour)
     {
