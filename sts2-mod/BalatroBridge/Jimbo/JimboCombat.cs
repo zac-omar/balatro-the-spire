@@ -268,10 +268,10 @@ internal static class JimboCombat
     {
         int turn = player.PlayerCombatState?.TurnNumber ?? 1;
         int limit = table.PerTurn?.Turns ?? 0;
-        Hand?.ShowTurn(turn, limit);
         int over = turn - limit;
+        int strength = OvertimeStrength * Math.Max(over, 0);
+        Hand?.ShowTurn(turn, limit, strength);
         if (limit <= 0 || over <= 0 || player.Creature.CombatState is not CombatState state) return false;
-        int strength = OvertimeStrength * over;
         foreach (Creature enemy in state.Enemies.Where(e => e.IsAlive).ToList())
         {
             await PowerCmd.Apply<StrengthPower>(choiceContext, enemy, strength, null, null);

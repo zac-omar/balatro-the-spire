@@ -77,8 +77,9 @@ last boss:
   gives Block equal to the cards' chips (in a fight with no discards, the played cards give it).
   Each turn has its share of the blind's hands and discards and ends when its hands run out.
 - **Overtime**: a blind gives its hands and no more, as in Balatro. Once your turns have used
-  them (4 turns at White Stake), the enemies gain Strength every turn, more each time. Jokers
-  for Balatro's final hand (Dusk, Acrobat) work in Overtime.
+  them (4 turns at White Stake), the enemies gain Strength every turn, more each time. A fuse
+  over the fight's panel burns down a notch a turn until it does. Jokers for Balatro's final
+  hand (Dusk, Acrobat) work in Overtime.
 - **A hand that dwarfs its target catches fire**, and so does Jimbo.
 - **Jokers are relics** and light up in the relic bar as they score, left to right. Drag one to a
   new place, or right-click it to sell it (in the shop, drag or click it). Status cards enemies hand out land in

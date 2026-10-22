@@ -96,6 +96,7 @@ internal sealed class JimboHand
     private NCreature? _reticle;
     private readonly CardTip _tip;
     private readonly CardDrag _drag;
+    private readonly TurnFuse _fuse;
     private readonly Control? _endTurn;
     private readonly int _endTurnZ;
 
@@ -189,6 +190,7 @@ internal sealed class JimboHand
         info.AddChild(_ante);
         _turn = TableStyle.Text("", 19, new Color(StsColors.cream, 0.8f), new Rect2(266, 196, 128, 26), TableStyle.Regular, 5);
         info.AddChild(_turn);
+        _fuse = new TurnFuse(_stage);
         _deck = TableStyle.Text("", 19, new Color(StsColors.cream, 0.8f), new Rect2(14, 222, 190, 30), TableStyle.Regular, 5);
         _deck.HorizontalAlignment = HorizontalAlignment.Left;
         info.AddChild(_deck);
@@ -639,17 +641,12 @@ internal sealed class JimboHand
 
     /// <summary>The discarded cards' chips, shown as the Block they became.</summary>
     /// <summary>The turn against the blind's hands ("Turn 2/4"), or overtime once they're spent.</summary>
-    public void ShowTurn(int turn, int limit)
+    /// <summary>The turn, and how near Overtime is: the fuse over the panel burns down a notch a turn.</summary>
+    public void ShowTurn(int turn, int limit, int strength)
     {
-        if (limit <= 0)
-        {
-            _turn.Text = "";
-            return;
-        }
-        bool over = turn > limit;
-        _turn.Text = over ? "Overtime!" : $"Turn {turn}/{limit}";
-        _turn.LabelSettings.FontColor = over ? StsColors.red : new Color(StsColors.cream, 0.8f);
-        if (over) TableFx.Juice(_turn, 0.2f);
+        _turn.Text = limit > 0 ? $"Turn {turn}" : "";
+        _turn.LabelSettings.FontColor = turn > limit && limit > 0 ? StsColors.red : new Color(StsColors.cream, 0.8f);
+        _fuse.Show(turn, limit, strength);
     }
 
     public void ShowBlock(double chips)
