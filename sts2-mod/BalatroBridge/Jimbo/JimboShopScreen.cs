@@ -283,6 +283,8 @@ internal sealed class JimboShopScreen
         }
         _nodes.Clear();
         _ownedButtons.Clear();
+        _ownedUse = null;
+        _usableNow.Clear();
         _packButtons.Clear();
         _packViews.Clear();
         _handDrag.Cancel();
@@ -910,6 +912,9 @@ internal sealed class JimboShopScreen
             {
                 if (GodotObject.IsInstanceValid(button)) button.Disabled = !result.PackUsable.Contains(id);
             }
+            // The consumable slots work on the pack's hand too.
+            _usableNow = result.Usable.ToHashSet();
+            if (_ownedUse is (int ownedId, Button ownedButton) && GodotObject.IsInstanceValid(ownedButton)) ownedButton.Disabled = !_usableNow.Contains(ownedId);
             SetStatus(result.PackUsable.Count > 0 ? "" : "Select cards for the tarot, then use it", new Color(StsColors.cream, 0.7f));
         }
         catch (Exception e)
@@ -931,7 +936,9 @@ internal sealed class JimboShopScreen
         if (_removed) return;
         HideTip();
         _effectShown = true;
-        CardView? used = effect.Card is TableCard c && _packViews.TryGetValue(c.Id, out CardView? v) && GodotObject.IsInstanceValid(v.Root) ? v : null;
+        // The card used: one of the pack's, or one from the consumable slots.
+        CardView? used = effect.Card is TableCard c && (_packViews.TryGetValue(c.Id, out CardView? v) || _shown.TryGetValue(c.Id, out var s) && (v = s.View) != null)
+            && GodotObject.IsInstanceValid(v.Root) ? v : null;
         if (effect.Card?.Name is string name) SetStatus(name, StsColors.gold);
         if (used != null)
         {
@@ -1027,6 +1034,9 @@ internal sealed class JimboShopScreen
     }
 
     private readonly List<Control> _ownedButtons = new();
+    // The selected consumable's Use button, and what Balatro says works on the cards selected now.
+    private (int Id, Button Button)? _ownedUse;
+    private HashSet<int> _usableNow = new();
     private readonly Dictionary<int, CardView> _ownedViews = new();
 
     private void LayoutJokers()
@@ -1080,10 +1090,14 @@ internal sealed class JimboShopScreen
         _ownedButtons.Add(sell);
         if (card.IsConsumable)
         {
-            // Tarots that change playing cards need some selected in hand: they're for fights and packs.
-            Button use = AddButton(card.Usable ? "Use" : "Use in fight", UseRed, new Rect2(x - 62, y + 50, 124, 44), card.Usable,
-                () => Choose(new ShopChoiceMade(ShopMove.Use, card.Id)), size: 20);
+            // Tarots that change playing cards need some selected in hand: in a fight, or on the
+            // hand an Arcana or Spectral pack deals (Balatro lets the slots be used on it too).
+            bool packHand = _handCards.Count > 0;
+            bool usable = packHand ? _usableNow.Contains(card.Id) || card.Usable : card.Usable;
+            Button use = AddButton(usable || packHand ? "Use" : "Use in fight", UseRed, new Rect2(x - 62, y + 50, 124, 44), usable,
+                () => Choose(new ShopChoiceMade(ShopMove.Use, card.Id, SelectedHand())), size: 20);
             _ownedButtons.Add(use);
+            _ownedUse = (card.Id, use);
         }
     }
 

@@ -75,7 +75,7 @@ internal static class JimboTable
                         ShopMove.BuyAndUse => await session.JimboBuy(link, choice.CardId, use: true),
                         ShopMove.Sell => await session.JimboSell(link, choice.CardId),
                         ShopMove.MoveJoker => await session.JimboMoveJoker(link, choice.CardId, choice.To),
-                        ShopMove.Use => await session.JimboUse(link, choice.CardId, []),
+                        ShopMove.Use => await session.JimboUse(link, choice.CardId, choice.HandCards ?? []),
                         ShopMove.Reroll => await session.RerollShop(),
                         ShopMove.Pick => await session.JimboPick(link, choice.CardId, choice.HandCards ?? []),
                         ShopMove.SkipPack => await session.JimboSkipPack(link),

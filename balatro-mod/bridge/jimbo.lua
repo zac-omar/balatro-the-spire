@@ -587,10 +587,25 @@ local function on_use(data, msg)
     link_from(data)
     local card = find_card(G.consumeables, data.card)
     if not card then error('that card is gone', 0) end
-    if G.STATE == G.STATES.SELECTING_HAND then select_in_hand(data.cards) end
+    -- On the cards in hand: a fight's, or the hand an Arcana or Spectral pack deals (Balatro lets
+    -- the consumable slots be used on it too, and StS2 shows the effect as a pack card's).
+    local pack_hand = dealer.in_pack() and G.hand and #G.hand.cards > 0
+    if G.STATE == G.STATES.SELECTING_HAND or pack_hand then select_in_hand(data.cards) end
     if not cards.usable(card) then error('that can\'t be used right now', 0) end
+    if pack_hand then
+        pack_effect = { used = {} }
+        pack_effect.card = cards.card_info(card, pack_effect.used, true)
+        pack_effect.before = hand_infos(pack_effect.used)
+    end
     G.FUNCS.use_card({ config = { ref_table = card } })
-    settle(msg, 'use', function() return card.area ~= G.consumeables and G.STATE ~= G.STATES.PLAY_TAROT end)
+    settle(msg, 'use', function()
+        if card.area == G.consumeables or G.STATE == G.STATES.PLAY_TAROT then return false end
+        if pack_hand and pack_effect and not pack_effect.after then
+            if not (dealer.in_pack() and stable() and dealer.events_idle()) then return false end
+            pack_effect.after = hand_infos(pack_effect.used)
+        end
+        return true
+    end)
 end
 
 local function on_pick(data, msg)
