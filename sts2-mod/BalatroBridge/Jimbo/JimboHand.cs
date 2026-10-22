@@ -346,7 +346,10 @@ internal sealed class JimboHand
         _blindName.Text = blind?.Name ?? "";
         _blindName.LabelSettings.FontColor = blind?.Boss == true ? blindColour.Lightened(0.3f) : StsColors.gold;
         _blindGoal.Text = blind?.Chips is double goal ? $"Blind {TableText.Number(goal)}  ·  Reward ${TableText.Number(blind.Dollars ?? 0)}" : "";
-        _blindText.Text = TableStyle.Markup(blind?.Text is string text && !blind.Disabled ? text : "", centred: false);
+        string rule = blind?.Text is string text && !blind.Disabled ? text : "";
+        // Verdant Leaf wants a joker sold: in StS2 that's from the relic bar.
+        if (blind is { Key: "bl_final_leaf", Disabled: false }) rule += "\n[gold](Right-click a joker relic to sell it.)[/gold]";
+        _blindText.Text = TableStyle.Markup(rule, centred: false);
         _blindChip.Texture = _art.Sprite(blind?.Sprite);
         _hands.Text = table.HandsLeft.ToString();
         _discards.Text = table.DiscardsLeft.ToString();
