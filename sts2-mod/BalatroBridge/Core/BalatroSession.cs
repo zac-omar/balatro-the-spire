@@ -130,9 +130,18 @@ public sealed class BalatroSession
     public async Task<TableSnapshot> Discard(IEnumerable<int> cardIds) =>
         TableSnapshot.FromJson((await Request("table_discard", Cards(cardIds), TableTimeout)).Data);
 
-    /// <summary>Plays the given cards and completes with the score and its scoring sequence.</summary>
-    public async Task<ScoredHand> PlayCards(IEnumerable<int> cardIds) =>
-        ScoredHand.FromJson((await Request("table_play", Cards(cardIds), TableTimeout)).Data);
+    /// <summary>
+    /// Plays the given cards and completes with the score and its scoring sequence. Jimbo's StS2
+    /// Strength and Vigor come along as <paramref name="mult"/> and <paramref name="chips"/> added
+    /// to the hand's base (the Rosetta Stone).
+    /// </summary>
+    public async Task<ScoredHand> PlayCards(IEnumerable<int> cardIds, int mult = 0, int chips = 0)
+    {
+        JsonObject data = Cards(cardIds);
+        if (mult != 0) data["mult"] = mult;
+        if (chips != 0) data["chips"] = chips;
+        return ScoredHand.FromJson((await Request("table_play", data, TableTimeout)).Data);
+    }
 
     public async Task<TableSnapshot> SortHand(bool bySuit) =>
         TableSnapshot.FromJson((await Request("table_sort", new JsonObject { ["by"] = bySuit ? "suit" : "rank" })).Data);
@@ -153,7 +162,8 @@ public sealed class BalatroSession
     /// <summary>Plays the blind on deck; <paramref name="kind"/> ("Small", "Big", "Boss") is what StS2 expects.</summary>
     public async Task<TableSnapshot> JimboBlind(JimboLink link, string kind) => await Table("jimbo_blind", link, new JsonObject { ["kind"] = kind });
 
-    public async Task<TableSnapshot> JimboTurn(JimboLink link) => await Table("jimbo_turn", link);
+    /// <summary>A new turn. <paramref name="rosetta"/>: hands, discards and afflicted cards StS2 adds or takes this turn.</summary>
+    public async Task<TableSnapshot> JimboTurn(JimboLink link, JsonObject? rosetta = null) => await Table("jimbo_turn", link, rosetta);
 
     /// <summary>
     /// The fight is won: Balatro beats the blind and adds up the cash-out. <paramref name="saved"/>:

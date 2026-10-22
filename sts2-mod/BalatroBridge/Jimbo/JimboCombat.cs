@@ -226,7 +226,8 @@ internal static class JimboCombat
         if (!_begun) return;
         try
         {
-            TableSnapshot table = await JimboRun.Session().JimboTurn(JimboRun.LinkFor(player));
+            (System.Text.Json.Nodes.JsonObject rosetta, string? said) = JimboRosetta.Turn(player);
+            TableSnapshot table = await JimboRun.Session().JimboTurn(JimboRun.LinkFor(player), rosetta);
             await JimboRun.Apply(player, table);
             if (Hand is JimboHand hand)
             {
@@ -235,6 +236,7 @@ internal static class JimboCombat
                 hand.SetInputEnabled(true);
             }
             if (await Overtime(player, table, choiceContext)) return;
+            if (said != null) Hand?.SetStatus(said, StsColors.cream);
             if (_greeting is JimboQuips.Moment greeting)
             {
                 _greeting = null;
@@ -315,7 +317,10 @@ internal static class JimboCombat
             // The cards as they were in hand (their suits ride along with their strikes).
             Dictionary<int, TableCard> inHand = JimboRun.Last?.Hand.ToDictionary(c => c.Id) ?? [];
             Task moveToPlay = hand?.MoveToPlay(ids) ?? Task.CompletedTask;
-            ScoredHand scored = await session.PlayCards(ids);
+            // The Rosetta Stone: Strength and Vigor join the hand as Mult and Chips.
+            (int strength, int vigor) = JimboRosetta.Bonus(player);
+            ScoredHand scored = await session.PlayCards(ids, strength, vigor);
+            if (vigor > 0) await JimboRosetta.Spent(player);
             await moveToPlay;
             decimal damage = (decimal)Math.Min(Math.Max(scored.Score, 0), (double)MaxHp);
             if (double.IsNaN(scored.Score)) damage = 0;

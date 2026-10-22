@@ -719,6 +719,8 @@ local function on_play(data, msg)
     playing = {
         id = msg.id, since = now(), chips_before = G.GAME.chips, target = G.GAME.blind and G.GAME.blind.chips,
         trace = {}, scoring = {},
+        -- Jimbo's StS2 Strength and Vigor, as Mult and Chips on the hand (bridge/jimbo.lua).
+        bonus = { mult = tonumber(data.mult) or 0, chips = tonumber(data.chips) or 0 },
     }
     G.FUNCS.play_cards_from_highlighted(nil)
     selecting_since = nil
@@ -849,6 +851,9 @@ end
 dealer.shop_settled = shop_settled
 
 function dealer.is_playing() return playing ~= nil end
+
+-- The hand being played's added Mult and Chips ({ mult, chips }), or nil.
+function dealer.play_bonus() return playing and playing.bonus end
 
 function dealer.install(bridge, keep_hand_ready)
     send = bridge.send

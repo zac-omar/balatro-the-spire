@@ -320,6 +320,47 @@ local function fight_left(scoring)
     return hands, discards
 end
 
+-- The Rosetta Stone at the start of a turn: what StS2 changes about the turn's energy becomes its
+-- hands (a gain of at most 1, and never below 1 hand), what it changes about the draw becomes its
+-- discards, and each card-afflicting debuff on Jimbo (Tangled, Hex...) debuffs a card in his hand
+-- for the turn. Hands and discards gained or lost count in the fight's totals too.
+local function unafflict()
+    for _, card in ipairs(G.playing_cards or {}) do
+        if card.ability.jimbo_afflicted then
+            card.ability.jimbo_afflicted = nil
+            if G.GAME.blind then G.GAME.blind:debuff_card(card) else card:set_debuff(false) end
+        end
+    end
+end
+
+local function adjust_turn(data)
+    local f, round = fight(), G.GAME.current_round
+    local hands, discards = tonumber(data.hands) or 0, tonumber(data.discards) or 0
+    if hands ~= 0 then
+        local before = round.hands_left
+        round.hands_left = math.max(1, before + math.min(hands, 1))
+        f.blind_hands = (f.blind_hands or 0) + (round.hands_left - before)
+    end
+    if discards ~= 0 then
+        local before = round.discards_left
+        round.discards_left = math.max(0, before + discards)
+        f.blind_discards = (f.blind_discards or 0) + (round.discards_left - before)
+    end
+    unafflict()
+    local count = tonumber(data.afflict) or 0
+    if count > 0 then
+        local candidates = {}
+        for _, card in ipairs(G.hand.cards) do
+            if not card.debuff and not card.ability.jimbo_dud then candidates[#candidates + 1] = card end
+        end
+        pseudoshuffle(candidates, pseudoseed('jimbo_afflict'))
+        for i = 1, math.min(count, #candidates) do
+            candidates[i].ability.jimbo_afflicted = true
+            candidates[i]:set_debuff(true)
+        end
+    end
+end
+
 -- Whether Balatro's Mr. Bones would save this round: he's there and not debuffed, and the
 -- fight's hands have scored at least a quarter of the blind.
 local function bones_can_save()
@@ -355,6 +396,7 @@ local function on_blind(data, msg)
                 end
                 G.GAME.jimbo_fight = { reshuffles = 0 }
                 purge_duds() -- strays from a fight that never finished
+                unafflict()
                 dealer.press(G.FUNCS.select_blind, select)
                 selected = true
             else
@@ -391,6 +433,7 @@ local function on_turn(data, msg)
             return nil
         end
         start_turn()
+        adjust_turn(data)
         return reply_state()
     end)
 end
@@ -411,6 +454,7 @@ local function on_win(data, msg)
                 ended = true
             elseif G.STATE == G.STATES.SELECTING_HAND and not dealer.is_playing() and dealer.events_idle() then
                 purge_duds()
+                unafflict()
                 -- The cash-out pays for the fight's hands (and discards) left unused, as Balatro's
                 -- does: a fight won in fewer hands earns more.
                 local f, round = fight(), G.GAME.current_round
@@ -887,6 +931,9 @@ local function install_rules()
     -- While a hand scores, jokers that count the round's hands and discards left (Acrobat and
     -- Dusk on the final hand, Banner, Mystic Summit) count the fight's, as in Balatro, not the
     -- turn's share.
+    -- The Rosetta Stone: Jimbo's StS2 Strength is Mult and his Vigor is Chips, added to the hand's
+    -- base before anything else scores (so jokers' xMult multiplies them too). A hand's base Mult
+    -- never drops below 1.
     local evaluate_play = G.FUNCS.evaluate_play
     G.FUNCS.evaluate_play = function(e)
         local f = fight()
@@ -894,7 +941,19 @@ local function install_rules()
         local round = G.GAME.current_round
         local turn_hands, turn_discards = round.hands_left, round.discards_left
         round.hands_left, round.discards_left = fight_left(true)
+        local bonus, added = dealer.play_bonus(), {}
+        if bonus and (bonus.mult ~= 0 or bonus.chips ~= 0) then
+            for key, hand in pairs(G.GAME.hands) do
+                local mult, chips = math.max(bonus.mult, 1 - hand.mult), math.max(bonus.chips, -hand.chips)
+                hand.mult, hand.chips = hand.mult + mult, hand.chips + chips
+                added[key] = { mult, chips }
+            end
+        end
         local ok, err = pcall(evaluate_play, e)
+        for key, d in pairs(added) do
+            local hand = G.GAME.hands[key]
+            hand.mult, hand.chips = hand.mult - d[1], hand.chips - d[2]
+        end
         round.hands_left, round.discards_left = turn_hands, turn_discards
         if not ok then error(err, 0) end
     end
@@ -961,7 +1020,7 @@ local function install_rules()
     -- Duds stay debuffed whatever the blind recalculates.
     local set_debuff = Card.set_debuff
     function Card:set_debuff(should_debuff)
-        if is_dud(self) then should_debuff = true end
+        if is_dud(self) or self.ability.jimbo_afflicted then should_debuff = true end
         return set_debuff(self, should_debuff)
     end
 
