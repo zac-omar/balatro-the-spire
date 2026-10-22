@@ -1016,6 +1016,48 @@ local function install_rules()
         if not ok then error(err, 0) end
     end
 
+    -- The Eye in Jimbo's fights: a hand can't be a type played in the last three turns (with a
+    -- hand a turn, Balatro's four hands needing four different types), so a long fight never runs
+    -- out of hands: a turn with nothing to play lets the oldest type back in. Its rule on the
+    -- blind names the types it's holding back.
+    local EYE_TURNS = 3
+    local function eye_held(f)
+        local now, held, seen = f.turn or 1, {}, {}
+        for _, entry in ipairs(f.eye_recent or {}) do
+            if now - entry.turn <= EYE_TURNS and not seen[entry.name] then
+                seen[entry.name] = true
+                held[#held + 1] = entry.name
+            end
+        end
+        return held, seen
+    end
+    local debuff_hand = Blind.debuff_hand
+    function Blind:debuff_hand(cards_in, hand, handname, check)
+        local f = fight()
+        if self.name ~= 'The Eye' or self.disabled or not (f and f.blind_hands) then
+            return debuff_hand(self, cards_in, hand, handname, check)
+        end
+        local _, held = eye_held(f)
+        self.triggered = held[handname] or false
+        if held[handname] then return true end
+        if not check then
+            local kept = {}
+            for _, entry in ipairs(f.eye_recent or {}) do
+                if (f.turn or 1) - entry.turn <= EYE_TURNS then kept[#kept + 1] = entry end
+            end
+            kept[#kept + 1] = { name = handname, turn = f.turn or 1 }
+            f.eye_recent = kept
+        end
+    end
+    local get_loc_debuff_text = Blind.get_loc_debuff_text
+    function Blind:get_loc_debuff_text()
+        local f = fight()
+        if self.name ~= 'The Eye' or self.disabled or not (f and f.blind_hands) then return get_loc_debuff_text(self) end
+        local names = {}
+        for _, name in ipairs((eye_held(f))) do names[#names + 1] = cards.loc(name, 'poker_hands') or name end
+        return 'No repeat of a hand type from your last ' .. EYE_TURNS .. ' turns' .. (#names > 0 and (' [' .. table.concat(names, ', ') .. ']') or '')
+    end
+
     local calculate_joker = Card.calculate_joker
     function Card:calculate_joker(context)
         -- A turn's refill isn't the start of a round: round-start jokers (Certificate) act once a fight.
