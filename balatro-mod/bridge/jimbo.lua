@@ -445,6 +445,7 @@ local function on_turn(data, msg)
         if not dealer.hand_settled() then return nil end
         if not refilling and #G.hand.cards < G.hand.config.card_limit and (#G.deck.cards > 0 or #G.discard.cards > 0) then
             refilling = true
+            fight().turn_refill = true
             G.STATE = G.STATES.DRAW_TO_HAND
             G.STATE_COMPLETE = false
             return nil
@@ -998,6 +999,21 @@ local function install_rules()
     cards.words = function(key, text)
         if not (OVERTIME_WORDS[key] and dealer.jimbo_mode()) then return text end
         return (text:gsub('[io]n %[orange%]final%[/orange%]%s+%[orange%]hand%[/orange%] of round', 'while in [orange]Overtime[/orange]'))
+    end
+
+    -- A new turn tops Jimbo's hand up to its size. The Serpent's "always draw 3" belongs to
+    -- Balatro's own draws after a hand or a discard; on a turn's refill it would overfill the hand.
+    local draw_from_deck_to_hand = G.FUNCS.draw_from_deck_to_hand
+    G.FUNCS.draw_from_deck_to_hand = function(e)
+        local f = fight()
+        if not (f and f.turn_refill) then return draw_from_deck_to_hand(e) end
+        f.turn_refill = nil
+        local round = G.GAME.current_round
+        local played, used = round.hands_played, round.discards_used
+        round.hands_played, round.discards_used = 0, 0 -- The Serpent only counts from the round's first hand or discard
+        local ok, err = pcall(draw_from_deck_to_hand, e)
+        round.hands_played, round.discards_used = played, used
+        if not ok then error(err, 0) end
     end
 
     local calculate_joker = Card.calculate_joker
