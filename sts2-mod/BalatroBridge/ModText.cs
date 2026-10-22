@@ -161,14 +161,6 @@ internal static class ModText
 
     public static LocString NoBalatro() => new(CardTable, "BALATRO_DEAL_IN.noBalatro");
 
-    private static string JokerRarity(int rarity) => rarity switch
-    {
-        1 => "A common joker.",
-        2 => "An uncommon joker.",
-        3 => "A rare joker.",
-        _ => "A legendary joker.",
-    };
-
     // Every Balatro item: its name (Balatro's own, once the catalog is in) and "{Text}", which
     // BalatroText fills in.
     private static (Dictionary<string, string> Relics, Dictionary<string, string> Potions) ItemEntries()
@@ -187,7 +179,8 @@ internal static class ModText
             }
             relics[entry + ".title"] = name;
             relics[entry + ".description"] = "{" + BalatroText.Variable + "}";
-            relics[entry + ".flavor"] = item.Set == "Joker" ? JokerRarity(item.Rarity) : Flavors.GetValueOrDefault(item.Set, "");
+            // A joker's rarity is in its text, in Balatro's colours (BalatroText), so no flavor line repeats it.
+            relics[entry + ".flavor"] = item.Set == "Joker" ? "" : Flavors.GetValueOrDefault(item.Set, "");
         }
         return (relics, potions);
     }

@@ -135,6 +135,7 @@ internal static class JimboRun
                 await RelicCmd.Obtain(relic, player);
             }
             relic.LiveText = card.Text;
+            relic.SetLive(card.Live);
             relic.Status = card.Debuffed ? RelicStatus.Disabled : RelicStatus.Normal;
         }
         OrderJokers(player, table);

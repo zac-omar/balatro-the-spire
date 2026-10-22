@@ -135,6 +135,54 @@ local function starts_new(parsed, previous)
     return false
 end
 
+-- A parsed part as it reads with its vars filled in, without markup.
+local function rendered(part, vars)
+    local out = {}
+    for _, sub in ipairs(part.strings) do
+        if type(sub) == 'string' then
+            out[#out + 1] = sub
+        else
+            local v = vars[tonumber(sub[1])]
+            out[#out + 1] = v ~= nil and tostring(v) or '?'
+        end
+    end
+    return table.concat(out)
+end
+
+-- Jokers that wear down rather than build up: their text has no "(Currently ...)" line, and
+-- the number it leads with is the one that changes (the var it's in).
+local WEARS_DOWN = { j_ice_cream = 1, j_popcorn = 1, j_ramen = 1, j_selzer = 1, j_turtle_bean = 1 }
+
+-- The number a joker that changes shows right now, as its text writes it ("+7", "X2.2", "$4",
+-- "0/2"): its "(Currently ...)" line's value, or the number a wearing-down joker leads with.
+-- Nil for a joker whose numbers never change. Read from the text's structure, so it works in
+-- any language.
+function cards.live_value(key, vars)
+    local group = G.localization.descriptions.Joker
+    local entry = group and group[key]
+    if not (entry and entry.text_parsed and vars) then return nil end
+    local want = WEARS_DOWN[key]
+    for _, parsed in ipairs(entry.text_parsed) do
+        local status = not want and parsed[1] and shape(parsed[1]):match('^%s*%(') ~= nil
+        for i, part in ipairs(parsed) do
+            local index
+            for _, sub in ipairs(part.strings) do
+                if type(sub) ~= 'string' then index = tonumber(sub[1]) break end
+            end
+            if index and (status or index == want) then
+                local text = rendered(part, vars)
+                if status then text = text:gsub('^%s*%(%D*', '') end -- "(Currently +7" reads "+7"
+                -- "(Currently 0/2)": a count out of a total reads as one value.
+                local after = parsed[i + 1] and rendered(parsed[i + 1], vars)
+                if after and after:match('^/') then text = text .. after:gsub('[%)%s]+$', '') end
+                text = text:gsub('^%s+', ''):gsub('[%s%)]+$', '')
+                return text ~= '' and text or nil
+            end
+        end
+    end
+    return nil
+end
+
 -- A description in StS2 markup: Balatro's localized text for `set`/`key`, with `vars` filled in.
 function cards.text(set, key, vars)
     local group = G.localization.descriptions[set]
@@ -220,7 +268,7 @@ function cards.describe(card)
         end
     end
     if #extras > 0 then text = (text and text .. '\n' or '') .. table.concat(extras, '\n') end
-    return text
+    return text, vars
 end
 
 -- Whether a consumable can be used now. Balatro's own check also says no while anything sits
@@ -288,7 +336,11 @@ function cards.card_info(card, used, describe)
         info.key = center.key
         info.name = cards.name(center)
         if center.soul_pos then info.soul = sprite(info.center.atlas, center.soul_pos, used) end
-        if describe then info.text = cards.describe(card) end
+        if describe then
+            local vars
+            info.text, vars = cards.describe(card)
+            if card.ability.set == 'Joker' then info.live = cards.live_value(center.key, vars) end
+        end
         info.sell = card.sell_cost
         info.eternal = card.ability.eternal or nil
         info.perishable = card.ability.perishable and (card.ability.perish_tally or 0) or nil

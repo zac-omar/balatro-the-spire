@@ -42,6 +42,9 @@ public sealed record TableCard(
     /// <summary>Balatro's own text for the card (current values), in StS2 markup.</summary>
     public string? Text { get; init; }
 
+    /// <summary>For a joker whose number changes: that number now, as its text writes it ("+7", "X2.2").</summary>
+    public string? Live { get; init; }
+
     /// <summary>Balatro's set: "Joker", "Tarot", "Planet", "Spectral", "Voucher", "Booster", "Default", "Enhanced".</summary>
     public string? Set { get; init; }
 
@@ -97,6 +100,7 @@ public sealed record TableCard(
         BalatroState.Num(c["cost"]))
     {
         Text = BalatroState.Str(c["text"]),
+        Live = BalatroState.Str(c["live"]),
         Set = BalatroState.Str(c["set"]),
         Sell = BalatroState.Num(c["sell"]),
         Usable = BalatroState.Bool(c["usable"]),

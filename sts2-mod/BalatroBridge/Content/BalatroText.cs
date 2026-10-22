@@ -17,7 +17,8 @@ internal static class BalatroText
     {
         string text = (relic.IsMutable ? relic.LiveText : null) ?? BalatroCatalog.Text(relic.BalatroKey) ?? Fallback(relic.Item);
         if (relic is StakeRelic) text = StakeText(relic.BalatroKey, text);
-        // Jimbo's jokers can be sold from the relic bar (JimboRelicBar).
+        // Balatro's rarity badge, in its colour.
+        if (relic is JokerRelic) text += "\n" + Rarity(relic.Item.Rarity);
         if (relic is JokerRelic { IsMutable: true } joker)
         {
             // In Jimbo's runs they're his jokers; anyone else's only play in Deal In's hands.
@@ -27,6 +28,15 @@ internal static class BalatroText
         }
         return text;
     }
+
+    // Balatro's rarity names in its rarity colours (globals.lua G.C.RARITY).
+    private static string Rarity(int rarity) => rarity switch
+    {
+        1 => "[color=#009DFF]Common[/color]",
+        2 => "[color=#4BC292]Uncommon[/color]",
+        3 => "[color=#FE5F55]Rare[/color]",
+        _ => "[color=#B26CBB]Legendary[/color]",
+    };
 
     // Jimbo's starting relic: what the stake adds, then the rules his whole run is played by.
     private static string StakeText(string key, string balatro)

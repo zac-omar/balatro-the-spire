@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using BalatroBridge.Jimbo;
 using MegaCrit.Sts2.Core.Combat;
@@ -66,6 +67,23 @@ public abstract class JokerRelic : BalatroRelic
     }
 
     public override bool IsStackable => false;
+
+    /// <summary>
+    /// The joker's changing number as its text writes it ("+7", "X2.2", "$4"), shown on the relic's
+    /// counter (see JimboRelicCounter); null for jokers whose numbers never change.
+    /// </summary>
+    internal string? LiveValue { get; private set; }
+
+    public override bool ShowCounter => LiveValue != null;
+
+    public override int DisplayAmount => int.TryParse(new string((LiveValue ?? "").Where(char.IsDigit).ToArray()), out int n) ? n : 0;
+
+    internal void SetLive(string? value)
+    {
+        if (value == LiveValue) return;
+        LiveValue = value;
+        InvokeDisplayAmountChanged();
+    }
 
     // Mr. Bones in Jimbo's runs: Balatro's "prevents death" happens in StS2, as Lizard Tail's does
     // (see JimboCombat.MrBonesWouldSave). Every other joker lets death be.
