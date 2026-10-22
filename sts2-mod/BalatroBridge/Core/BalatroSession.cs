@@ -146,6 +146,9 @@ public sealed class BalatroSession
     public async Task<TableSnapshot> SortHand(bool bySuit) =>
         TableSnapshot.FromJson((await Request("table_sort", new JsonObject { ["by"] = bySuit ? "suit" : "rank" })).Data);
 
+    /// <summary>Puts Balatro's hand in this order, left to right (the player dragged cards around).</summary>
+    public async Task ReorderHand(IEnumerable<int> cardIds) => await Request("table_reorder", Cards(cardIds));
+
     // Jimbo (bridge/jimbo.lua): every request names the run, so Balatro is always in the right one.
 
     /// <summary>Jimbo's step timeout: a little longer than Balatro's own, so its reason arrives first.</summary>

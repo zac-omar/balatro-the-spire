@@ -8,6 +8,7 @@
 --   table_discard     -> discards cards, then replies with the refreshed hand
 --   table_play        -> plays cards, then replies with the score and a step-by-step scoring trace
 --   table_sort        -> sorts the hand by rank or suit
+--   table_reorder     -> puts the hand in the order given (the player dragged cards around)
 --   table_shop_buy    -> buys a joker, then replies with the refreshed shop
 --   table_shop_reroll -> rerolls the shop's jokers
 --   table_shop_leave  -> leaves the shop; for Deal In the next hand is dealt in the background
@@ -747,6 +748,25 @@ local function on_sort(data, msg)
     send('table', snapshot(), msg.id)
 end
 
+-- Puts the hand in the order the player dragged it into on StS2's side (cards not listed keep
+-- their order, after the rest). As in Balatro, the order is each card's place left to right:
+-- Death reads it to know which selected card is copied onto the others (the rightmost).
+local function on_reorder(data, msg)
+    if not (G.hand and G.hand.cards) then error('no hand is dealt right now', 0) end
+    local order = {}
+    for i, id in ipairs(type(data.cards) == 'table' and data.cards or {}) do order[tonumber(id)] = i end
+    local listed, rest = {}, {}
+    for _, card in ipairs(G.hand.cards) do
+        if order[card.sort_id] then listed[#listed + 1] = card else rest[#rest + 1] = card end
+    end
+    table.sort(listed, function(a, b) return order[a.sort_id] < order[b.sort_id] end)
+    for _, card in ipairs(rest) do listed[#listed + 1] = card end
+    for i, card in ipairs(listed) do G.hand.cards[i] = card end
+    G.hand:set_ranks()
+    G.hand:align_cards()
+    send('ack', {}, msg.id)
+end
+
 -- Driving Balatro -----------------------------------------------------------------------------
 
 local function in_pack()
@@ -881,6 +901,7 @@ function dealer.install(bridge, keep_hand_ready)
     bridge.handlers.table_discard = on_discard
     bridge.handlers.table_play = on_play
     bridge.handlers.table_sort = on_sort
+    bridge.handlers.table_reorder = on_reorder
     bridge.handlers.table_shop_buy = on_shop_buy
     bridge.handlers.table_shop_reroll = on_shop_reroll
     bridge.handlers.table_shop_leave = on_shop_leave

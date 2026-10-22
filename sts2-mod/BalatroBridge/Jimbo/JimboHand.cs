@@ -95,6 +95,7 @@ internal sealed class JimboHand
     private bool _removed;
     private NCreature? _reticle;
     private readonly CardTip _tip;
+    private readonly CardDrag _drag;
     private readonly Control? _endTurn;
     private readonly int _endTurnZ;
 
@@ -109,6 +110,9 @@ internal sealed class JimboHand
 
     /// <summary>The selection changed (consumables may work on these cards).</summary>
     public event Action<int[]>? SelectionChanged;
+
+    /// <summary>The player dragged cards into this order (ids, left to right).</summary>
+    public event Action<int[]>? Reordered;
 
     /// <summary>The enemy Jimbo's hands are aimed at.</summary>
     public Creature? Target { get; private set; }
@@ -135,6 +139,9 @@ internal sealed class JimboHand
         };
         _root.AddChild(_stage);
         _tip = new CardTip(_stage, StageSize);
+        // Cards are picked by clicking and moved by dragging, as in Balatro (Death copies the rightmost).
+        _drag = new CardDrag(_hand, () => IsAcceptingInput, LayoutHand, Toggle, (_, ids) => Reordered?.Invoke(ids));
+        _drag.Started += view => _tip.Hide(view);
         // StS2's End Turn button sits where the felt band runs: it goes on top.
         if (parent is NCombatUi ui && GodotObject.IsInstanceValid(ui.EndTurnButton))
         {
@@ -255,6 +262,7 @@ internal sealed class JimboHand
     public async Task Deal(TableSnapshot table, bool deselect = false)
     {
         if (_removed) return;
+        _drag.Cancel();
         ApplyInfo(table);
         if (table.Hand.Count > 0) SetStatus("", StsColors.cream);
 
@@ -356,18 +364,18 @@ internal sealed class JimboHand
         view.Root.MouseEntered += () =>
         {
             SetHover(view, true);
-            if (_hand.Contains(view)) _tip.Show(view, above: true);
+            if (_hand.Contains(view) && _drag.Dragging == null) _tip.Show(view, above: true);
         };
         view.Root.MouseExited += () =>
         {
             SetHover(view, false);
             _tip.Hide(view);
         };
+        _drag.Attach(view);
         view.Root.GuiInput += input =>
         {
-            if (input is not InputEventMouseButton { Pressed: true } click) return;
-            if (click.ButtonIndex == MouseButton.Left) Toggle(view);
-            else if (click.ButtonIndex == MouseButton.Right) ClearSelection();
+            if (input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }) return;
+            ClearSelection();
             view.Root.AcceptEvent();
         };
         _cards.AddChild(view.Root);
@@ -392,7 +400,10 @@ internal sealed class JimboHand
     private void Relayout()
     {
         LayoutHand();
-        foreach (CardView view in _hand) TableFx.Move(view, view.Home, view.HomeRotation, 0.16f);
+        foreach (CardView view in _hand)
+        {
+            if (view != _drag.Dragging) TableFx.Move(view, view.Home, view.HomeRotation, 0.16f);
+        }
     }
 
     // Input ------------------------------------------------------------------------------------
@@ -407,6 +418,7 @@ internal sealed class JimboHand
 
     private void SetHover(CardView view, bool hovered)
     {
+        if (_drag.Dragging != null) return;
         if (!_hand.Contains(view) || !_acceptingInput)
         {
             view.Hovered = false;

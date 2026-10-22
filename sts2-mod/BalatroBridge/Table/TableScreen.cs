@@ -110,6 +110,7 @@ internal sealed partial class TableScreen
     private readonly List<Control> _revealed = new(); // the score and damage shown after a hand
     private TableSnapshot? _table;
     private CardTip? _tip;
+    private readonly CardDrag _drag;
     private Vector2 _stageHome;
     private bool _removed;
     private TaskCompletionSource<TableAction>? _action;
@@ -120,6 +121,8 @@ internal sealed partial class TableScreen
     {
         _session = session;
         _target = target;
+        // Cards are picked by clicking and moved by dragging, as in Balatro.
+        _drag = new CardDrag(_hand, () => _acceptingInput && !_removed, LayoutHand, Toggle, (_, ids) => TaskHelper.RunSafely(Reorder(ids)));
         var tree = (SceneTree)Engine.GetMainLoop();
         Vector2 screen = tree.Root.GetVisibleRect().Size;
 
@@ -278,6 +281,7 @@ internal sealed partial class TableScreen
     public async Task Deal(TableSnapshot table)
     {
         _art.Learn(table);
+        _drag.Cancel();
         ApplyInfo(table);
         SetStatus("", StsColors.cream);
 
@@ -324,11 +328,11 @@ internal sealed partial class TableScreen
         var view = new CardView(card, _art, _table?.Back, scale);
         view.Root.MouseEntered += () => SetHover(view, true);
         view.Root.MouseExited += () => SetHover(view, false);
+        _drag.Attach(view);
         view.Root.GuiInput += input =>
         {
-            if (input is not InputEventMouseButton { Pressed: true } click) return;
-            if (click.ButtonIndex == MouseButton.Left) Toggle(view);
-            else if (click.ButtonIndex == MouseButton.Right) ClearSelection();
+            if (input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }) return;
+            ClearSelection();
             view.Root.AcceptEvent();
         };
         _cards.AddChild(view.Root);
@@ -353,7 +357,23 @@ internal sealed partial class TableScreen
     private void Relayout()
     {
         LayoutHand();
-        foreach (CardView view in _hand) Move(view, view.Home, view.HomeRotation, 0.16f);
+        foreach (CardView view in _hand)
+        {
+            if (view != _drag.Dragging) Move(view, view.Home, view.HomeRotation, 0.16f);
+        }
+    }
+
+    // Dragged cards move in Balatro's hand too.
+    private async Task Reorder(int[] ids)
+    {
+        try
+        {
+            await _session.ReorderHand(ids);
+        }
+        catch (Exception e)
+        {
+            BridgeMod.LogError($"reordering the hand failed: {e.Message}");
+        }
     }
 
     // Input ---------------------------------------------------------------------------------------
@@ -395,6 +415,7 @@ internal sealed partial class TableScreen
 
     private void SetHover(CardView view, bool hovered)
     {
+        if (_drag.Dragging != null) return;
         if (!_hand.Contains(view) || !_acceptingInput)
         {
             view.Hovered = false;

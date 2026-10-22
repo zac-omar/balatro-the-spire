@@ -75,6 +75,7 @@ internal static class JimboCombat
         JimboHand hand = JimboHand.Attach(combatUi);
         hand.Submitted += (play, ids) => Submit(player, play, ids);
         hand.SortRequested += bySuit => TaskHelper.RunSafely(Sort(player, bySuit));
+        hand.Reordered += ids => TaskHelper.RunSafely(Reorder(ids));
         hand.SelectionChanged += ids => TaskHelper.RunSafely(Highlight(player, ids));
         JimboConsumables.SelectedCards = () => JimboHand.Current?.Selected ?? [];
         Float(player);
@@ -477,6 +478,19 @@ internal static class JimboCombat
         catch (Exception e)
         {
             BridgeMod.LogError($"jimbo: sort failed: {e.Message}");
+        }
+    }
+
+    // Dragging cards around moves them in Balatro's hand too (Death copies the rightmost selected card).
+    private static async Task Reorder(int[] ids)
+    {
+        try
+        {
+            await JimboRun.Session().ReorderHand(ids);
+        }
+        catch (Exception e)
+        {
+            BridgeMod.LogError($"jimbo: reordering the hand failed: {e.Message}");
         }
     }
 

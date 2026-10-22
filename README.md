@@ -70,7 +70,8 @@ last boss:
 - **The Dealer** opens each act: pick a deck (act 1), a voucher (act 2) or a legendary joker (act 3).
 - **The map** is one path of Balatro's blinds, with the coming Boss Blind showing. Hover a blind
   for its HP, reward and effect.
-- **Every fight is a blind**: the enemies' HP is its chip target. Pick cards, then **Play Hand**.
+- **Every fight is a blind**: the enemies' HP is its chip target. Click cards to pick them (drag
+  them to rearrange your hand, as in Balatro), then **Play Hand**.
   Each scoring card flies at the enemy you clicked for a share of the hand's score, then the
   suits add a little: Hearts heal, Diamonds Block, Clubs Weak, Spades Vulnerable. **Discard**
   gives Block equal to the cards' chips (in a fight with no discards, the played cards give it).
