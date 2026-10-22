@@ -88,7 +88,12 @@ local function blind_info(used)
         boss = blind.boss and true or false,
         colour = cards.hex(conf.boss_colour),
         sprite = conf.pos and cards.sprite('blind_chips', { x = 0, y = conf.pos.y }, used),
-        text = blind.loc_debuff_text ~= '' and blind.loc_debuff_text or nil,
+        text = (function()
+            -- As Balatro's blind panel shows it: The Wheel's odds, The Mouth's chosen hand.
+            local text = blind.get_loc_debuff_text and blind:get_loc_debuff_text() or blind.loc_debuff_text
+            text = text and text:gsub('%s+', ' '):gsub('^ ', ''):gsub(' $', '')
+            return text ~= '' and text or nil
+        end)(),
         disabled = blind.disabled or nil,
         dollars = blind.dollars,
     }
@@ -137,6 +142,8 @@ local function blind_choice(kind, used)
         if blind.name == 'The Ox' then vars = { loc(G.GAME.current_round.most_played_poker_hand, 'poker_hands') } end
         text = cards.text('Blind', blind.key, vars)
         if text then text = text:gsub('\n', ' ') end
+        -- The Wheel's text starts at its odds (" in 7 cards..."): Balatro puts the chance in front.
+        if text and blind.name == 'The Wheel' then text = tostring(G.GAME.probabilities.normal) .. text end
     end
     return {
         key = blind.key,
