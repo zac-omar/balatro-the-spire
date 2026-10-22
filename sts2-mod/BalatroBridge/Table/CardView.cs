@@ -13,6 +13,9 @@ internal sealed class CardView
 {
     public static readonly Vector2 FullSize = new(142, 190);
 
+    /// <summary>The Cerulean Bell's blue (its boss colour in Balatro).</summary>
+    public static readonly Color Cerulean = new("009CFD");
+
     // Foil, holographic and polychrome shimmer, and negative's inverted colours, in the spirit of
     // Balatro's edition shaders.
     private const string EditionShaderCode = """
@@ -54,8 +57,10 @@ internal sealed class CardView
             MouseFilter = Control.MouseFilterEnum.Stop,
         };
 
-        var glow = TableStyle.Box(new Color(StsColors.gold, 0.12f), StsColors.gold, 12, 4);
-        glow.ShadowColor = new Color(StsColors.gold, 0.55f);
+        // The Cerulean Bell's card glows its colour: it's picked, and it stays picked.
+        Color edge = card.Forced ? Cerulean : StsColors.gold;
+        var glow = TableStyle.Box(new Color(edge, 0.12f), edge, 12, 4);
+        glow.ShadowColor = new Color(edge, 0.55f);
         glow.ShadowSize = 18;
         glow.ShadowOffset = Vector2.Zero;
         _glow = TableStyle.Panel(new Rect2(-6, -6, size.X + 12, size.Y + 12), glow);

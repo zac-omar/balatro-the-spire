@@ -299,6 +299,8 @@ internal sealed partial class TableScreen
             dealt.Add(view);
         }
         foreach (CardView stale in keep.Values) stale.Root.QueueFree();
+        // The Cerulean Bell's card is always picked.
+        foreach (CardView view in _hand) if (view.Card.Forced) view.SetSelected(true);
         for (int i = 0; i < _hand.Count; i++) _cards.MoveChild(_hand[i].Root, i);
 
         LayoutHand();
@@ -406,6 +408,14 @@ internal sealed partial class TableScreen
     private void Toggle(CardView view)
     {
         if (!_acceptingInput || !_hand.Contains(view) || _table == null) return;
+        if (view.Selected && view.Card.Forced)
+        {
+            // The Cerulean Bell won't let it go.
+            Juice(view.Root, 0.08f);
+            BalatroSound("cancel", 1f, 0.5f);
+            SetStatus("The Cerulean Bell forces this card!", CardView.Cerulean);
+            return;
+        }
         if (!view.Selected && SelectedCount >= _table.SelectLimit)
         {
             Juice(view.Root, 0.08f);
@@ -422,9 +432,9 @@ internal sealed partial class TableScreen
 
     private void ClearSelection()
     {
-        if (!_acceptingInput || SelectedCount == 0) return;
+        if (!_acceptingInput || !_hand.Any(c => c.Selected && !c.Card.Forced)) return;
         BalatroSound("cardSlide2", 1f, 0.3f);
-        foreach (CardView view in _hand) view.SetSelected(false);
+        foreach (CardView view in _hand) view.SetSelected(view.Card.Forced);
         Relayout();
         RefreshButtons();
         _ = UpdatePreview();

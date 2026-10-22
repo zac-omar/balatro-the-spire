@@ -74,6 +74,9 @@ public sealed record TableCard(
     /// <summary>For a status card the enemy put in Jimbo's deck (a dud): which one, as StS2 knows it.</summary>
     public int? Dud { get; init; }
 
+    /// <summary>The Cerulean Bell's card: always selected, and it can't be put back.</summary>
+    public bool Forced { get; init; }
+
     public bool IsJoker => Set == "Joker";
 
     public bool IsConsumable => Set is "Tarot" or "Planet" or "Spectral";
@@ -109,6 +112,7 @@ public sealed record TableCard(
         Rental = BalatroState.Bool(c["rental"]),
         Pile = BalatroState.Str(c["pile"]),
         Dud = BalatroState.Int(c["dud"]),
+        Forced = BalatroState.Bool(c["forced"]),
         Suits = c["suits"] is JsonArray suits ? string.Join(",", suits.Select(BalatroState.Str).OfType<string>()) : "",
     };
 

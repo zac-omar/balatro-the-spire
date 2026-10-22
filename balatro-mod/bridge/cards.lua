@@ -325,6 +325,8 @@ function cards.card_info(card, used, describe)
             info.seal_sprite = seal and sprite('centers', seal.sprite_pos, used)
         end
         if describe then info.text = cards.playing_card_text(card) end
+        -- The Cerulean Bell's card: always selected, so StS2 shows it picked and locked.
+        info.forced = card.ability.forced_selection or nil
         local dud = card.ability.jimbo_dud
         if dud then
             -- A status card from the fight (see jimbo.lua): StS2's name and words for it.

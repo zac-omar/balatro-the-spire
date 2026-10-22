@@ -294,6 +294,8 @@ internal sealed class JimboHand
             TableFx.Sound("tarot2", 1f + 0.05f * changed.IndexOf(view), 0.4f);
         }
         foreach (CardView gone in keep.Values) Vanish(gone);
+        // The Cerulean Bell's card is always picked.
+        foreach (CardView view in _hand) if (view.Card.Forced) view.SetSelected(true);
         for (int i = 0; i < _hand.Count; i++) _cards.MoveChild(_hand[i].Root, i);
 
         LayoutHand();
@@ -418,6 +420,14 @@ internal sealed class JimboHand
     private void Toggle(CardView view)
     {
         if (!_acceptingInput || !_hand.Contains(view) || _table == null) return;
+        if (view.Selected && view.Card.Forced)
+        {
+            // The Cerulean Bell won't let it go.
+            TableFx.Juice(view.Root, 0.08f);
+            TableFx.Sound("cancel", 1f, 0.5f);
+            SetStatus("The Cerulean Bell forces this card!", CardView.Cerulean);
+            return;
+        }
         if (!view.Selected && Selected.Length >= _table.SelectLimit)
         {
             TableFx.Juice(view.Root, 0.08f);
@@ -434,9 +444,9 @@ internal sealed class JimboHand
 
     private void ClearSelection()
     {
-        if (!_acceptingInput || Selected.Length == 0) return;
+        if (!_acceptingInput || !_hand.Any(c => c.Selected && !c.Card.Forced)) return;
         TableFx.Sound("cardSlide2", 1f, 0.3f);
-        foreach (CardView view in _hand) view.SetSelected(false);
+        foreach (CardView view in _hand) view.SetSelected(view.Card.Forced);
         Relayout();
         RefreshButtons();
         _ = UpdatePreview();

@@ -266,18 +266,33 @@ local function cards_by_id(ids, area)
 end
 dealer.cards_by_id = cards_by_id
 
+local function found_in(list, card)
+    for _, other in ipairs(list) do
+        if other == card then return true end
+    end
+    return false
+end
+
 local function require_selection(ids)
     if G.STATE ~= G.STATES.SELECTING_HAND or playing then error('no hand is dealt right now', 0) end
     local found, asked = cards_by_id(ids)
     if asked == 0 then error('select at least one card', 0) end
     if #found ~= asked then error('some of those cards are no longer in hand', 0) end
-    if #found > (G.hand.config.highlighted_limit or 5) then error('too many cards selected', 0) end
+    -- The Cerulean Bell's card is played or thrown away with them, asked for or not.
+    local picked = #found
+    for _, card in ipairs(G.hand.cards) do
+        if card.ability.forced_selection and not found_in(found, card) then picked = picked + 1 end
+    end
+    if picked > (G.hand.config.highlighted_limit or 5) then error('too many cards selected', 0) end
     return found
 end
 
+-- Selects exactly these cards, plus the Cerulean Bell's (Balatro never lets it go), each once.
 local function highlight(selection)
     G.hand:unhighlight_all()
-    for _, card in ipairs(selection) do G.hand:add_to_highlighted(card, true) end
+    for _, card in ipairs(selection) do
+        if not found_in(G.hand.highlighted, card) then G.hand:add_to_highlighted(card, true) end
+    end
 end
 dealer.highlight = highlight
 
