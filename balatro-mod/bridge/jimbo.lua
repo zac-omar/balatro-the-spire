@@ -128,8 +128,17 @@ local function extend_snapshot(snap, used)
     snap.won_run = game.won or nil
     snap.interest = { amount = game.interest_amount, cap = game.interest_cap, off = game.modifiers.no_interest or nil }
     if snap.state ~= 'hand' then snap.next_blind = dealer.next_blind_info(used) end
+    -- The tags waiting to be used (Balatro shows them down the side), with their art and words.
     local tags = {}
-    for i, tag in ipairs(game.tags or {}) do tags[i] = { key = tag.key, name = tag.name } end
+    for i, tag in ipairs(game.tags or {}) do
+        local proto = G.P_TAGS[tag.key]
+        tags[i] = {
+            key = tag.key,
+            name = proto and cards.loc({ type = 'name_text', set = 'Tag', key = tag.key }) or tag.name,
+            text = proto and cards.tag_text(tag.key) or nil,
+            sprite = proto and cards.sprite('tags', proto.pos, used) or nil,
+        }
+    end
     snap.tags = tags
     -- The road ahead, for Jimbo's map: this ante's three blinds (its Boss Blind is already
     -- chosen) and every ante's base chips.

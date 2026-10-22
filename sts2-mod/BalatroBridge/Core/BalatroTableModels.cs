@@ -159,6 +159,17 @@ public sealed record TableBlind(string Name, double? Chips, bool Boss, string? C
         : null;
 }
 
+/// <summary>
+/// Balatro's interest: <see cref="Amount"/> dollars for every $5 held at the cash-out, on up to
+/// <see cref="Cap"/> dollars.
+/// </summary>
+public sealed record InterestRule(double Amount, double Cap)
+{
+    public double For(double dollars) => Amount * Math.Min(Math.Floor(Math.Max(dollars, 0) / 5), Math.Floor(Cap / 5));
+
+    public bool Maxed(double dollars) => dollars >= Cap;
+}
+
 /// <summary>A Balatro tag: what skipping a Small or Big Blind gives.</summary>
 public sealed record TagInfo(string Key, string Name, string? Text, SpriteRef? Sprite)
 {
@@ -341,6 +352,12 @@ public sealed record TableSnapshot(
 
     public IReadOnlyList<string> Tags { get; init; } = [];
 
+    /// <summary>The tags waiting to be used, with their art and Balatro's words for them.</summary>
+    public IReadOnlyList<TagInfo> OwnedTags { get; init; } = [];
+
+    /// <summary>How interest pays at the cash-out; null when it doesn't (Green Deck, say).</summary>
+    public InterestRule? Interest { get; init; }
+
     /// <summary>After a discard: the chips on the cards thrown away (Jimbo's block).</summary>
     public double DiscardedChips { get; init; }
 
@@ -397,6 +414,10 @@ public sealed record TableSnapshot(
             PackEffect = PackEffect.FromJson(t["pack_effect"]),
             WonRun = BalatroState.Bool(t["won_run"]),
             Tags = t["tags"] is JsonArray g ? g.OfType<JsonObject>().Select(o => BalatroState.Str(o["key"])).OfType<string>().ToList() : [],
+            OwnedTags = t["tags"] is JsonArray owned ? owned.Select(TagInfo.FromJson).OfType<TagInfo>().ToList() : [],
+            Interest = t["interest"] is JsonObject rule && !BalatroState.Bool(rule["off"])
+                ? new InterestRule(BalatroState.Num(rule["amount"]) ?? 1, BalatroState.Num(rule["cap"]) ?? 25)
+                : null,
             DiscardedChips = BalatroState.Num(t["discarded_chips"]) ?? 0,
         };
     }
