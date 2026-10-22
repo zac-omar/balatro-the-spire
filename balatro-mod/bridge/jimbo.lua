@@ -420,6 +420,12 @@ local function on_win(data, msg)
                 local saved = data.saved and bones_can_save()
                 G.GAME.jimbo_fight = nil
                 cashing = { rows = {}, total = 0, paid = {}, notes = {} }
+                -- The Wager: a raised Boss Blind beaten pays a Rare Tag (a free Rare Joker in the next shop).
+                if dealer.raised() and G.GAME.blind:get_type() == 'Boss' and not saved then
+                    add_tag(Tag('tag_rare'))
+                    cashing.notes[#cashing.notes + 1] = 'The Wager: ' .. (cards.loc({ type = 'name_text', set = 'Tag', key = 'tag_rare' }) or 'Rare Tag')
+                end
+                G.GAME.jimbo_raise = nil
                 if not saved then G.GAME.chips = math.max(G.GAME.chips, G.GAME.blind.chips) end
                 G.STATE = G.STATES.NEW_ROUND
                 G.STATE_COMPLETE = false
@@ -434,6 +440,20 @@ local function on_win(data, msg)
         return 'jimbo_cash_out', {
             rows = summary.rows, total = total, paid = summary.paid, notes = summary.notes, table = dealer.snapshot(),
         }
+    end)
+end
+
+-- The Wager: from the shop, the Boss Blind on deck is raised (dealer.RAISE times its chips) for
+-- a Rare Tag if it's beaten. From the second ante on; once raised, it stays raised.
+local function on_raise(data, msg)
+    link_from(data)
+    pend(msg, 'raise', function()
+        if not stable() then return nil end
+        if dealer.on_deck_kind() ~= 'Boss' or G.GAME.round_resets.ante < 2 then
+            error('only a Boss Blind can be raised, from the second ante on', 0)
+        end
+        G.GAME.jimbo_raise = { ante = G.GAME.round_resets.ante }
+        return reply_state()
     end)
 end
 
@@ -909,6 +929,17 @@ local function install_rules()
         return out
     end
 
+    -- The Wager: a raised Boss Blind's chips go up as it's set (and are saved with it).
+    local set_blind = Blind.set_blind
+    function Blind:set_blind(blind, reset, silent)
+        local out = set_blind(self, blind, reset, silent)
+        if not reset and blind and blind.boss and dealer.raised() then
+            self.chips = self.chips * dealer.RAISE
+            self.chip_text = number_format(self.chips)
+        end
+        return out
+    end
+
     local status_text = card_eval_status_text
     card_eval_status_text = function(card, eval_type, amt, percent, dir, extra)
         if cashing and card and G.STATE == G.STATES.NEW_ROUND then
@@ -1000,6 +1031,7 @@ function jimbo.install(bridge)
     h.jimbo_offers = on_offers
     h.jimbo_grant = on_grant
     h.jimbo_skip = on_skip
+    h.jimbo_raise = on_raise
     h.jimbo_open_shop = on_open_shop
     h.jimbo_duds = on_duds
     dealer.extend_snapshot = extend_snapshot

@@ -208,6 +208,9 @@ public sealed class BalatroSession
     /// <summary>Leaves the shop and skips the next Small or Big Blind for its tag (a pack tag opens its pack).</summary>
     public async Task<TableSnapshot> JimboSkip(JimboLink link) => await Table("jimbo_skip", link);
 
+    /// <summary>The Wager: raises the Boss Blind on deck (more chips, a Rare Tag if it's beaten).</summary>
+    public async Task<TableSnapshot> JimboRaise(JimboLink link) => await Table("jimbo_raise", link);
+
     /// <summary>Opens the shop a skipped blind owes Jimbo; otherwise the run as it is.</summary>
     public async Task<TableSnapshot> JimboOpenShop(JimboLink link) => await Table("jimbo_open_shop", link);
 

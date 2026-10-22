@@ -138,6 +138,9 @@ internal static class JimboMapChips
             };
             if (blind.Boss && current && !string.IsNullOrEmpty(blind.Text)) lines.Add(blind.Text);
             if (!blind.Boss) lines.Add("[color=#9aa0a6]From the shop before it, you can skip it for a tag.[/color]");
+            // The Wager: Boss Blinds are raised instead of skipped.
+            if (blind.Boss && current && blind.Raised) lines.Add("[red]Raised[/red]: beat it for a [gold]Rare Tag[/gold].");
+            else if (blind.Boss && current && ante >= 2) lines.Add("[color=#9aa0a6]From the shop before it, you can raise it for a Rare Tag.[/color]");
             ModText.SetLive("characters", TipTitleKey, blind.Name);
             Texture2D? icon = blind.Sprite is SpriteRef sprite && Chip(sprite.Y) is var (chip, _) ? chip : null;
             NHoverTipSet.CreateAndShow(__instance, new HoverTip(new LocString("characters", TipTitleKey), string.Join("\n", lines), icon), HoverTipAlignment.Right);

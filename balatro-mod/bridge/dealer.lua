@@ -106,6 +106,25 @@ local function shop_candidates()
     return keys
 end
 
+-- The Wager (Jimbo's runs): a Boss Blind raised from the shop plays at RAISE times its chips,
+-- and beating it adds a Rare Tag (bridge/jimbo.lua).
+local RAISE = 1.5
+dealer.RAISE = RAISE
+
+local function raised()
+    local wager = G.GAME and G.GAME.jimbo_raise
+    return wager ~= nil and wager.ante == G.GAME.round_resets.ante
+end
+dealer.raised = raised
+
+-- The blind that comes after the shop ('Small', 'Big' or 'Boss'), as Balatro's blind select works it out.
+local function on_deck_kind()
+    local states = G.GAME.round_resets.blind_states
+    local function done(s) return s == 'Defeated' or s == 'Skipped' or s == 'Hide' end
+    return not done(states.Small) and 'Small' or not done(states.Big) and 'Big' or 'Boss'
+end
+dealer.on_deck_kind = on_deck_kind
+
 -- One of the ante's three blinds ('Small', 'Big' or 'Boss') as Balatro's blind select shows it.
 local function blind_choice(kind, used)
     local reset = G.GAME.round_resets
@@ -122,7 +141,9 @@ local function blind_choice(kind, used)
         key = blind.key,
         kind = kind,
         name = loc({ type = 'name_text', set = 'Blind', key = blind.key }) or blind.name,
-        chips = get_blind_amount(reset.ante) * blind.mult * G.GAME.starting_params.ante_scaling,
+        chips = get_blind_amount(reset.ante) * blind.mult * G.GAME.starting_params.ante_scaling
+            * ((kind == 'Boss' and raised()) and RAISE or 1),
+        raised = (kind == 'Boss' and raised()) or nil,
         boss = blind.boss and true or false,
         colour = cards.hex(blind.boss_colour),
         sprite = used and blind.pos and cards.sprite('blind_chips', { x = 0, y = blind.pos.y }, used) or nil,
@@ -150,11 +171,11 @@ end
 
 -- The blind that comes after the shop, as Balatro's blind select works it out.
 local function next_blind_info(used)
-    local states = G.GAME.round_resets.blind_states
-    local function done(s) return s == 'Defeated' or s == 'Skipped' or s == 'Hide' end
-    local on_deck = not done(states.Small) and 'Small' or not done(states.Big) and 'Big' or 'Boss'
+    local on_deck = on_deck_kind()
     local info = blind_choice(on_deck, used)
     if not info then return nil end
+    -- A Boss Blind can be raised (the Wager) from the second ante on, once a boss has been beaten.
+    if jimbo_mode() and on_deck == 'Boss' and not raised() then info.raisable = G.GAME.round_resets.ante >= 2 end
     -- Small and Big Blinds can be skipped for a tag.
     local tag_key = on_deck ~= 'Boss' and G.GAME.round_resets.blind_tags and G.GAME.round_resets.blind_tags[on_deck]
     if tag_key and G.P_TAGS[tag_key] then

@@ -166,6 +166,12 @@ public sealed record NextBlind(string Name, double? Chips, bool Boss)
 
     public double? Dollars { get; init; }
 
+    /// <summary>The Wager: this Boss Blind can be raised from the shop.</summary>
+    public bool Raisable { get; init; }
+
+    /// <summary>The Wager: this Boss Blind was raised (its chips already show it).</summary>
+    public bool Raised { get; init; }
+
     public static NextBlind? FromJson(JsonNode? node) => node is JsonObject b
         ? new NextBlind(BalatroState.Str(b["name"]) ?? "Blind", BalatroState.Num(b["chips"]), BalatroState.Bool(b["boss"]))
         {
@@ -176,6 +182,8 @@ public sealed record NextBlind(string Name, double? Chips, bool Boss)
             Sprite = SpriteRef.FromJson(b["sprite"]),
             Dollars = BalatroState.Num(b["dollars"]),
             Tag = TagInfo.FromJson(b["tag"]),
+            Raisable = BalatroState.Bool(b["raisable"]),
+            Raised = BalatroState.Bool(b["raised"]),
         }
         : null;
 }

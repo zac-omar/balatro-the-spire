@@ -79,6 +79,7 @@ internal static class JimboTable
                         ShopMove.Reroll => await session.RerollShop(),
                         ShopMove.Pick => await session.JimboPick(link, choice.CardId, choice.HandCards ?? []),
                         ShopMove.SkipPack => await session.JimboSkipPack(link),
+                        ShopMove.RaiseBlind => await session.JimboRaise(link),
                         ShopMove.Refresh => await session.JimboState(link),
                         _ => null,
                     };

@@ -20,6 +20,7 @@ internal enum ShopMove
     SkipPack,
     Leave,
     SkipBlind,
+    RaiseBlind, // the Wager: the Boss Blind on deck plays bigger, for a Rare Tag
     MoveJoker, // to slot To (1-based), as dragging a joker in Balatro
     Refresh, // shows the shop as Balatro has it now (after something outside the shop changed it)
 }
@@ -287,6 +288,7 @@ internal sealed class JimboShopScreen
             if (JimboRun.Me() is { } me) TaskHelper.RunSafely(JimboDeckScreen.Toggle(me, Layer + 1));
         }, size: 28);
         if (shop.NextBlind?.Tag is TagInfo tag) AddSkip(shop.NextBlind, tag);
+        else if (shop.NextBlind is { Boss: true } boss && (boss.Raisable || boss.Raised)) AddRaise(boss);
         bool canReroll = shop.RerollCost <= 0 || shop.RerollCost <= money;
         AddButton("Reroll $" + TableText.Number(shop.RerollCost), RerollGreen, new Rect2(1560, 860, 330, 96), canReroll,
             () => Choose(new ShopChoiceMade(ShopMove.Reroll)), size: 34);
@@ -387,6 +389,43 @@ internal sealed class JimboShopScreen
         AddButton($"Skip {next.Name}", new Color(0.32f, 0.36f, 0.42f), new Rect2(116, 718, 270, 62), true,
             () => Choose(new ShopChoiceMade(ShopMove.SkipBlind)), size: 22);
         AddNode(TableStyle.Text("for " + tag.Name, 18, new Color(StsColors.cream, 0.7f), new Rect2(116, 782, 270, 26), TableStyle.Regular, 4));
+    }
+
+    // The Wager, in the skip's place: the Boss Blind on deck can be raised (its chips x1.5) for a
+    // Rare Tag if it's beaten. Small and Big Blinds can be skipped; Boss Blinds can be raised.
+    private const double RaiseFactor = 1.5;
+
+    private void AddRaise(NextBlind boss)
+    {
+        var icon = new TextureRect
+        {
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            Texture = _art.Sprite(boss.Sprite),
+            Position = new Vector2(40, 716), Size = new Vector2(66, 66),
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        double chips = boss.Chips ?? 0;
+        string tip = boss.Raised
+            ? $"Raised to [red]{TableText.Number(chips)}[/red] chips. Beat it for a [gold]Rare Tag[/gold]."
+            : $"[red]{TableText.Number(chips)}[/red] chips, or [red]{TableText.Number(chips * RaiseFactor)}[/red] raised. Beat it raised for a [gold]Rare Tag[/gold].";
+        icon.MouseEntered += () =>
+        {
+            TableFx.Juice(icon, 0.1f);
+            TableFx.HoverSound();
+            ShowTip(boss.Name, tip, new Vector2(40, 716), new Vector2(66, 66));
+        };
+        icon.MouseExited += HideTip;
+        AddNode(icon);
+        if (boss.Raised)
+        {
+            AddNode(TableStyle.Text("Raised!", 30, ShopRed, new Rect2(116, 718, 270, 62), TableStyle.Title, 8));
+            AddNode(TableStyle.Text(TableText.Number(chips) + " chips", 18, new Color(StsColors.cream, 0.7f), new Rect2(116, 782, 270, 26), TableStyle.Regular, 4));
+            return;
+        }
+        AddButton($"Raise: x{RaiseFactor:0.#}", ShopRed, new Rect2(116, 718, 270, 62), true,
+            () => Choose(new ShopChoiceMade(ShopMove.RaiseBlind)), size: 24);
+        AddNode(TableStyle.Text("for a Rare Tag", 18, new Color(StsColors.cream, 0.7f), new Rect2(116, 782, 270, 26), TableStyle.Regular, 4));
     }
 
     private static string PackTitle(string? kind) => kind switch
