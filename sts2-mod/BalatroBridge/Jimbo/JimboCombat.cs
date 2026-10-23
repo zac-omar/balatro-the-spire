@@ -281,8 +281,8 @@ internal static class JimboCombat
         {
             await PowerCmd.Apply<StrengthPower>(choiceContext, enemy, strength, null, null);
         }
+        // The fuse says what they gain (its label, and the OVERTIME slam on the first turn).
         TableFx.Sound(over == 1 ? "gong" : "timpani", 1f, 0.6f);
-        Hand?.SetStatus($"Overtime! Enemies gain {strength} Strength.", StsColors.red);
         // A word as overtime starts, and now and then as it drags on.
         if (over % 3 == 1) JimboQuips.Maybe(player, JimboQuips.Moment.Overtime);
         return true;
