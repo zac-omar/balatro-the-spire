@@ -40,6 +40,13 @@ public sealed class Jimbo : CharacterModel
 
     public override IEnumerable<CardModel> StartingDeck => Array.Empty<CardModel>();
 
+    // The powers his hands put on (Clubs' Weak, Spades' Vulnerable), Overtime's Strength and the
+    // Rosetta Stone's Vigor: a character's cards bring their icons in with the run's assets, and
+    // Jimbo has none, so StS2 loaded them mid-fight ("Asset not cached").
+    protected override IEnumerable<string> ExtraAssetPaths =>
+        new[] { "weak_power", "vulnerable_power", "strength_power", "vigor_power" }
+            .Select(icon => MegaCrit.Sts2.Core.Helpers.ImageHelper.GetImagePath("powers/" + icon + ".png"));
+
     /// <summary>White Stake; a run at a higher ascension swaps in its stake (see <see cref="JimboPatches"/>).</summary>
     public override IReadOnlyList<RelicModel> StartingRelics => [ModelDb.Relic<BalatroWhiteStake>()];
 
