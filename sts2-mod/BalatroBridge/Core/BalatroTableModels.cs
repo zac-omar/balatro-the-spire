@@ -249,6 +249,25 @@ public sealed record PackSnapshot(string? Kind, int Choices, IReadOnlyList<Table
         : null;
 }
 
+/// <summary>
+/// Balatro's background as it is now (bridge/dealer.lua): the three colours and the contrast its
+/// background shader (resources/shaders/background.fs) eases to, and how much it swirls. Colours
+/// are RGBA, 0-1, and may run past 1 (Balatro brightens its light colour by a third).
+/// </summary>
+public sealed record BackgroundInfo(float[] Colour1, float[] Colour2, float[] Colour3, double Contrast, double Spin)
+{
+    public static BackgroundInfo? FromJson(JsonNode? node)
+    {
+        if (node is not JsonObject b) return null;
+        float[]? Colour(string key) => b[key] is JsonArray a && a.Count >= 3
+            ? a.Select(v => (float)(BalatroState.Num(v) ?? 1)).Concat(Enumerable.Repeat(1f, 4)).Take(4).ToArray()
+            : null;
+        return Colour("colour_1") is float[] c1 && Colour("colour_2") is float[] c2 && Colour("colour_3") is float[] c3
+            ? new BackgroundInfo(c1, c2, c3, BalatroState.Num(b["contrast"]) ?? 1, BalatroState.Num(b["spin"]) ?? 0)
+            : null;
+    }
+}
+
 /// <summary>Hands and discards each StS2 turn gets in a Jimbo fight.</summary>
 public sealed record PerTurn(int Hands, int Discards, int Turns)
 {
@@ -361,6 +380,9 @@ public sealed record TableSnapshot(
     /// <summary>The Needle's charge in Jimbo's fights: the next hand's Mult multiplier (1 when uncharged).</summary>
     public int Charge { get; init; } = 1;
 
+    /// <summary>Balatro's background for this moment (null from a bridge without it).</summary>
+    public BackgroundInfo? Background { get; init; }
+
     /// <summary>After a discard: the chips on the cards thrown away (Jimbo's block).</summary>
     public double DiscardedChips { get; init; }
 
@@ -419,6 +441,7 @@ public sealed record TableSnapshot(
             Tags = t["tags"] is JsonArray g ? g.OfType<JsonObject>().Select(o => BalatroState.Str(o["key"])).OfType<string>().ToList() : [],
             OwnedTags = t["tags"] is JsonArray owned ? owned.Select(TagInfo.FromJson).OfType<TagInfo>().ToList() : [],
             Charge = BalatroState.Int(t["charge"]) ?? 1,
+            Background = BackgroundInfo.FromJson(t["background"]),
             Interest = t["interest"] is JsonObject rule && !BalatroState.Bool(rule["off"])
                 ? new InterestRule(BalatroState.Num(rule["amount"]) ?? 1, BalatroState.Num(rule["cap"]) ?? 25)
                 : null,

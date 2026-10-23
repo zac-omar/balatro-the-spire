@@ -17,7 +17,7 @@ socket: Balatro does the real card work (dealing, poker hands, jokers, scoring) 
 └──────────────────────────────────┘                    └──────────────────────────────┘
 ```
 
-Nothing from either game is in this repo. Jimbo's items, art and sounds are generated from your
+Nothing from either game is in this repo. Jimbo's items, art, sounds and shaders are generated from your
 own copy of Balatro when you build.
 
 | Path | What |

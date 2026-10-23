@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import io
 import math
+import re
 import struct
 import sys
 from pathlib import Path
@@ -336,10 +337,50 @@ void fragment() {
 """
 
 
-def char_select_background() -> str:
+def love_to_godot(love: str) -> str:
+    """One of Balatro's LÖVE pixel shaders as Godot shading language, as the mod's
+    BalatroShaders.cs translates them: its uniforms and effect(), clocks on TIME."""
+    s = love.replace("\r\n", "\n")
+    s = re.sub(r"#if\s+defined\(VERTEX\).*?#endif", "", s, flags=re.S)
+    s = re.sub(r"#ifdef\s+VERTEX.*?#endif", "", s, flags=re.S)
+    s = s.replace("MY_HIGHP_OR_MEDIUMP", "")
+    s = re.sub(r"\bextern\b", "uniform", s)
+    s = re.sub(r"\bnumber\b", "float", s)
+    s = re.sub(r"Texel\(\s*texture\s*,", "Texel(tex_in,", s)
+    s = re.sub(r"\bImage\s+texture\b", "sampler2D tex_in", s)
+    s = s.replace("Texel(", "texture(")
+    s = re.sub(r"(?<![\w.])(\d+)\.(?![\d\w])", r"\1.0", s)
+    s = re.sub(r"(?<![\w.\d])\.(\d)", r"0.\1", s)
+    header = ["shader_type canvas_item;", "uniform vec4 love_ScreenSize = vec4(2560.0, 1200.0, 0.0, 0.0);"]
+    for clock in ("time", "spin_time"):
+        s = re.sub(r"uniform\s+\w+\s+" + clock + r"\s*;", "", s)
+        header.append(f"#define {clock} TIME")
+    return "\n".join(header) + "\n" + s.strip() + "\n"
+
+
+# A Small Blind's background, its green (50846E) at the brightnesses Balatro's
+# ease_background_colour gives its three colours.
+SMALL_BLIND = {"colour_1": (0.282, 0.466, 0.388), "colour_2": (0.408, 0.673, 0.561), "colour_3": (0.220, 0.362, 0.302)}
+
+
+def background_shader(balatro: Path) -> tuple[str, str]:
+    """The character select's swirl: Balatro's own background shader from the build if it has
+    it (and the shader parameters for it), else the mod's drawing of it."""
+    path = balatro / "resources" / "shaders" / "background.fs"
+    if not path.is_file():
+        return FELT_SHADER, ""
+    code = love_to_godot(path.read_text(encoding="utf-8")) + \
+        "void fragment() {\n    COLOR = effect(vec4(1.0), TEXTURE, UV, UV * love_ScreenSize.xy);\n}\n"
+    params = "".join(f"shader_parameter/{k} = Color({r}, {g}, {b}, 1)\n" for k, (r, g, b) in SMALL_BLIND.items())
+    params += "shader_parameter/contrast = 1.0\nshader_parameter/spin_amount = 0.0\n"
+    return code, params
+
+
+def char_select_background(balatro: Path) -> str:
     # Same frame as StS2's backgrounds (2560x1200 around the screen centre): Balatro's felt
     # swirling behind a big Jimbo.
-    shader = FELT_SHADER.replace('"', '\\"')
+    code, params = background_shader(balatro)
+    shader = code.replace('"', '\\"')
     return f"""[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Texture2D" path="res://images/bolatro/jimbo_portrait.png" id="1"]
@@ -349,7 +390,7 @@ code = "{shader}"
 
 [sub_resource type="ShaderMaterial" id="Material_felt"]
 shader = SubResource("Shader_felt")
-
+{params}
 [node name="JimboBg" type="Control"]
 layout_mode = 3
 anchors_preset = 8
@@ -453,7 +494,7 @@ def build(balatro: Path) -> Pack:
 
     pack.text(f"res://scenes/creature_visuals/{CHARACTER}.tscn", creature_visuals())
     pack.text(f"res://scenes/ui/character_icons/{CHARACTER}_icon.tscn", character_icon())
-    pack.text(f"res://scenes/screens/char_select/char_select_bg_{CHARACTER}.tscn", char_select_background())
+    pack.text(f"res://scenes/screens/char_select/char_select_bg_{CHARACTER}.tscn", char_select_background(balatro))
     pack.text(f"res://materials/transitions/{CHARACTER}_transition_mat.tres", transition_material())
     # Rooms and effects Jimbo never shows himself in still need scenes to exist.
     pack.text(f"res://scenes/combat/energy_counters/{CHARACTER}_energy_counter.tscn",

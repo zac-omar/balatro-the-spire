@@ -32,8 +32,9 @@ internal sealed partial class TableScreen
     private const int Layer = 60;
     private static readonly Vector2 StatusPosition = new(560, 492);
 
-    // Balatro's pixelated swirl. `reveal` opens it as an iris from `origin` (0..1 across the
-    // screen) with a wobbling gold rim, and `spin` winds the swirl up while it opens or closes.
+    // The mod's drawing of Balatro's swirl, for a build without Balatro's own shaders (see
+    // BalatroBackground). `reveal` opens it as an iris from `origin` (0..1 across the screen) with
+    // a wobbling gold rim, and `spin` winds the swirl up while it opens or closes.
     internal const string FeltShader = """
         shader_type canvas_item;
         uniform vec4 colour_1 : source_color = vec4(0.24, 0.42, 0.35, 1.0);
@@ -76,6 +77,7 @@ internal sealed partial class TableScreen
     private readonly ColorRect _shade;
     private readonly ColorRect _felt;
     private readonly ShaderMaterial _feltMaterial;
+    private bool _backgroundShown;
     private readonly Control _stage;
     private readonly Control _cards;
 
@@ -137,7 +139,7 @@ internal sealed partial class TableScreen
 
         _shade = new ColorRect { Size = screen, Color = new Color(0, 0, 0, 0), MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.AddChild(_shade);
-        _feltMaterial = new ShaderMaterial { Shader = new Shader { Code = FeltShader } };
+        _feltMaterial = BalatroBackground.Create(FeltShader, screen);
         _feltMaterial.SetShaderParameter("reveal", 0f);
         _felt = new ColorRect { Size = screen, Material = _feltMaterial, MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.AddChild(_felt);
@@ -825,8 +827,19 @@ internal sealed partial class TableScreen
             : table.Blind?.Boss == true ? BalatroAudio.Track.Boss : BalatroAudio.Track.Main);
         TableBlind? blind = table.Blind;
         Color blindColour = blind?.Colour is string hex ? new Color(hex) : TableStyle.DefaultFelt;
-        _feltMaterial.SetShaderParameter("colour_1", blind?.Boss == true ? blindColour.Darkened(0.25f) : TableStyle.DefaultFelt);
-        _feltMaterial.SetShaderParameter("colour_2", new Color(0.06f, 0.08f, 0.11f));
+        // The background Balatro is showing for this blind (a boss's colour and swirl), or the
+        // stand-in's blind colours from a bridge that doesn't say.
+        if (table.Background is BackgroundInfo background)
+        {
+            if (_backgroundShown) BalatroBackground.Ease(_feltMaterial, background, _root, 0.6 / Speed);
+            else BalatroBackground.Set(_feltMaterial, background);
+            _backgroundShown = true;
+        }
+        else if (!BalatroBackground.IsBalatros(_feltMaterial))
+        {
+            _feltMaterial.SetShaderParameter("colour_1", blind?.Boss == true ? blindColour.Darkened(0.25f) : TableStyle.DefaultFelt);
+            _feltMaterial.SetShaderParameter("colour_2", new Color(0.06f, 0.08f, 0.11f));
+        }
 
         _blindName.Text = blind?.Name ?? "";
         _blindName.LabelSettings.FontColor = blind?.Boss == true ? blindColour.Lightened(0.3f) : StsColors.gold;

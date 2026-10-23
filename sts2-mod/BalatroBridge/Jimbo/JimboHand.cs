@@ -34,7 +34,8 @@ internal sealed class JimboHand
     private const float PlayY = 470;
     private static readonly Vector2 DeckPosition = new(1990, 990);
 
-    // The felt band: Balatro's swirl, fading out at its top edge into the fight.
+    // The felt band: Balatro's swirl, fading out at its top edge into the fight. This drawing of it
+    // is for a build without Balatro's own background shader (see BalatroBackground).
     private const string BandShaderCode = """
         shader_type canvas_item;
         uniform vec4 colour_1 : source_color = vec4(0.24, 0.42, 0.35, 1.0);
@@ -54,6 +55,7 @@ internal sealed class JimboHand
     private readonly Control _root;
     private readonly Control _stage;
     private readonly ShaderMaterial _feltMaterial;
+    private bool _backgroundShown;
     private readonly Control _cards;
     private readonly BalatroArt _art = BalatroArt.Shared;
 
@@ -153,14 +155,21 @@ internal sealed class JimboHand
             _endTurn.ZIndex = Math.Max(_endTurnZ, 1);
         }
 
-        _feltMaterial = new ShaderMaterial { Shader = new Shader { Code = BandShaderCode } };
         // The felt runs edge to edge: on a screen wider than 16:9 (StS2's 21:9 setting) the stage
-        // sits in the middle, with as much screen again on either side.
+        // sits in the middle, with as much screen again on either side. It is the bottom of a
+        // screen-sized swirl, as Balatro's background fills its screen, fading in at its top.
         float side = _stage.Position.X / scale + 200;
+        Vector2 bandSize = new(StageSize.X + 2 * side, StageSize.Y - BandTop + 40);
+        _feltMaterial = BalatroBackground.Create(BandShaderCode, new Vector2(bandSize.X, StageSize.Y + 40), new Vector2(0, BandTop), bandSize);
+        if (BalatroBackground.IsBalatros(_feltMaterial))
+        {
+            _feltMaterial.SetShaderParameter("alpha", 0.93f);
+            _feltMaterial.SetShaderParameter("top_fade", 0.32f);
+        }
         var felt = new ColorRect
         {
             Position = new Vector2(-side, BandTop),
-            Size = new Vector2(StageSize.X + 2 * side, StageSize.Y - BandTop + 40),
+            Size = bandSize,
             Material = _feltMaterial,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -354,7 +363,17 @@ internal sealed class JimboHand
         _table = table;
         TableBlind? blind = table.Blind;
         Color blindColour = blind?.Colour is string hex ? new Color(hex) : TableStyle.DefaultFelt;
-        _feltMaterial.SetShaderParameter("colour_1", blind?.Boss == true ? blindColour.Darkened(0.3f) : TableStyle.DefaultFelt);
+        // The background Balatro is showing for this blind (a boss's colour and swirl).
+        if (table.Background is BackgroundInfo background)
+        {
+            if (_backgroundShown) BalatroBackground.Ease(_feltMaterial, background, _stage, 0.6 / Speed);
+            else BalatroBackground.Set(_feltMaterial, background);
+            _backgroundShown = true;
+        }
+        else if (!BalatroBackground.IsBalatros(_feltMaterial))
+        {
+            _feltMaterial.SetShaderParameter("colour_1", blind?.Boss == true ? blindColour.Darkened(0.3f) : TableStyle.DefaultFelt);
+        }
         _blindName.Text = blind?.Name ?? "";
         _blindName.LabelSettings.FontColor = blind?.Boss == true ? blindColour.Lightened(0.3f) : StsColors.gold;
         _blindGoal.Text = blind?.Chips is double goal ? $"Blind {TableText.Number(goal)}  ·  Reward ${TableText.Number(blind.Dollars ?? 0)}" : "";

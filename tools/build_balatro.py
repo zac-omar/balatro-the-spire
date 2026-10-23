@@ -60,7 +60,8 @@ def patch_conf(src: bytes, identity: str | None) -> bytes:
 def extract_assets(game: zipfile.ZipFile, out: Path, folder: str) -> int:
     """Copies Balatro's files under `folder` next to the exe, so StS2 can use them directly:
     the sprite sheets to draw cards with Balatro's art, the sounds to play Balatro's music and
-    card sounds through StS2's own audio output."""
+    card sounds through StS2's own audio output, and the shaders StS2 draws Balatro's effects
+    with (its background swirl, its score flames)."""
     count = 0
     for info in game.infolist():
         if info.filename.startswith(folder) and not info.is_dir():
@@ -99,6 +100,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     textures = extract_assets(game, args.out, "resources/textures/")
     sounds = extract_assets(game, args.out, "resources/sounds/")
+    shaders = extract_assets(game, args.out, "resources/shaders/")
 
     patched = io.BytesIO()
     with zipfile.ZipFile(patched, "w", zipfile.ZIP_DEFLATED) as out:
@@ -121,7 +123,7 @@ def main() -> None:
     saves = "your real Balatro profile" if args.shared_saves else f"isolated profile %APPDATA%\\{ISOLATED_IDENTITY}"
     print(f"Built bridged Balatro {version} -> {args.out / 'Balatro.exe'}")
     print(f"  injected {len(mod_files)} file(s): {', '.join(mod_files)}")
-    print(f"  extracted {textures} texture(s) and {sounds} sound(s) for StS2's table")
+    print(f"  extracted {textures} texture(s), {sounds} sound(s) and {shaders} shader(s) for StS2's table")
     print(f"  saves: {saves}")
 
 

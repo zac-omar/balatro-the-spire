@@ -226,6 +226,45 @@ local function shop_info(used)
     }
 end
 
+-- Balatro's background: the colours and contrast its background shader is easing toward
+-- (ease_background_colour works them out from the blind, the boss, the pack...), and how much it
+-- swirls (a Boss Blind's spin). StS2 draws the same shader with them.
+local background
+
+local function install_background()
+    local ease = ease_background_colour
+    ease_background_colour = function(args)
+        local target = { contrast = args.contrast or (background and background.contrast) }
+        for _, k in ipairs({ 'C', 'L', 'D' }) do
+            local colour
+            if args.new_colour and args.special_colour and args.tertiary_colour then
+                colour = args[k == 'L' and 'new_colour' or k == 'C' and 'special_colour' or 'tertiary_colour']
+            elseif args.new_colour and k == 'C' and args.special_colour then
+                colour = args.special_colour
+            elseif args.new_colour then
+                local b = k == 'L' and 1.3 or k == 'D' and (args.special_colour and 0.4 or 0.7) or 0.9
+                colour = { args.new_colour[1] * b, args.new_colour[2] * b, args.new_colour[3] * b }
+            end
+            target[k] = colour and { colour[1], colour[2], colour[3] } or (background and background[k])
+        end
+        background = target
+        return ease(args)
+    end
+end
+
+local function background_info()
+    local now = G.C.BACKGROUND
+    local function colour(k)
+        local c = background and background[k] or now[k]
+        return c and { c[1], c[2], c[3], 1 } or nil
+    end
+    return {
+        colour_1 = colour('C'), colour_2 = colour('L'), colour_3 = colour('D'),
+        contrast = background and background.contrast or now.contrast or 1,
+        spin = G.ARGS.spin and G.ARGS.spin.real or 0,
+    }
+end
+
 local function snapshot()
     local game = G.GAME
     local used = {}
@@ -251,6 +290,7 @@ local function snapshot()
         deck_total = #G.playing_cards,
         back = back and cards.sprite('centers', back.pos, used),
         texture_scale = G.SETTINGS.GRAPHICS.texture_scaling,
+        background = background_info(),
     }
     if dealer.extend_snapshot then dealer.extend_snapshot(snap, used) end
     snap.atlases = cards.atlases(used)
@@ -934,6 +974,7 @@ function dealer.install(bridge, keep_hand_ready)
     install_recorders()
     install_end_round()
     install_shop()
+    install_background()
 end
 
 -- Drops requests from a host that went away.

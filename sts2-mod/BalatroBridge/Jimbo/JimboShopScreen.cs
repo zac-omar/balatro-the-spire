@@ -118,10 +118,10 @@ internal sealed class JimboShopScreen
         // The room behind goes dark, so the shop reads as its own place.
         _shade = new ColorRect { Size = screen, Color = new Color(0.02f, 0.03f, 0.05f, 0), MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.AddChild(_shade);
-        _feltMaterial = new ShaderMaterial { Shader = new Shader { Code = TableScreen.FeltShader } };
+        _feltMaterial = BalatroBackground.Create(TableScreen.FeltShader, screen);
         _feltMaterial.SetShaderParameter("reveal", 0f);
         _feltMaterial.SetShaderParameter("origin", new Vector2(0.5f, 0.5f));
-        _feltMaterial.SetShaderParameter("colour_1", new Color("3B5D7A"));
+        if (!BalatroBackground.IsBalatros(_feltMaterial)) _feltMaterial.SetShaderParameter("colour_1", new Color("3B5D7A"));
         _root.AddChild(new ColorRect { Size = screen, Material = _feltMaterial, MouseFilter = Control.MouseFilterEnum.Ignore });
 
         float scale = Math.Min(screen.X / StageSize.X, screen.Y / StageSize.Y);
@@ -329,7 +329,9 @@ internal sealed class JimboShopScreen
 
     // Balatro's room changes with where you are (ease_background_colour_blind): the shop's swirl
     // takes the colour of the blind just beaten, and each pack has its own colours, music layer
-    // and sparkle (an Arcana pack's glitter, a Celestial pack's stars and meteors).
+    // and sparkle (an Arcana pack's glitter, a Celestial pack's stars and meteors). The colours
+    // are the ones the hidden Balatro is showing (table.Background); the ones below are for a
+    // build without Balatro's own background shader.
     private string _mood = "";
     private Control? _ambience;
     private Tween? _moodTween;
@@ -371,16 +373,24 @@ internal sealed class JimboShopScreen
         bool first = _mood.Length == 0;
         _mood = kind;
         _moodTween?.Kill();
-        if (first)
+        if (table.Background is BackgroundInfo background && BalatroBackground.IsBalatros(_feltMaterial))
         {
-            // The room opens already in the right colours.
-            _feltMaterial.SetShaderParameter("colour_1", main);
-            _feltMaterial.SetShaderParameter("colour_2", accent);
+            // The room opens already in the right colours, and eases between rooms as Balatro does.
+            if (first) BalatroBackground.Set(_feltMaterial, background);
+            else _moodTween = BalatroBackground.Ease(_feltMaterial, background, _root, 0.6 / Speed);
         }
-        _moodTween = _root.CreateTween().SetParallel();
-        Color fromMain = (Color)_feltMaterial.GetShaderParameter("colour_1"), fromAccent = (Color)_feltMaterial.GetShaderParameter("colour_2");
-        _moodTween.TweenMethod(Callable.From<Color>(c => _feltMaterial.SetShaderParameter("colour_1", c)), fromMain, main, 0.6 / Speed);
-        _moodTween.TweenMethod(Callable.From<Color>(c => _feltMaterial.SetShaderParameter("colour_2", c)), fromAccent, accent, 0.6 / Speed);
+        else
+        {
+            if (first)
+            {
+                _feltMaterial.SetShaderParameter("colour_1", main);
+                _feltMaterial.SetShaderParameter("colour_2", accent);
+            }
+            _moodTween = _root.CreateTween().SetParallel();
+            Color fromMain = (Color)_feltMaterial.GetShaderParameter("colour_1"), fromAccent = (Color)_feltMaterial.GetShaderParameter("colour_2");
+            _moodTween.TweenMethod(Callable.From<Color>(c => _feltMaterial.SetShaderParameter("colour_1", c)), fromMain, main, 0.6 / Speed);
+            _moodTween.TweenMethod(Callable.From<Color>(c => _feltMaterial.SetShaderParameter("colour_2", c)), fromAccent, accent, 0.6 / Speed);
+        }
 
         if (_ambience != null && GodotObject.IsInstanceValid(_ambience))
         {
