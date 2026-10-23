@@ -279,6 +279,37 @@ function cards.usable(card, any_state)
     return card:can_use_consumeable(any_state, true) and true or false
 end
 
+-- What a consumable that can't be used now is missing, for the player ("Hex needs a Joker
+-- without an edition"), following Card:can_use_consumeable's rules. No ': ' in it: StS2 shows
+-- the part of a refusal after the last one.
+function cards.why_unusable(card)
+    local ability = card.ability
+    local c = ability.consumeable or {}
+    local name = cards.name(card.config.center)
+    local why
+    if ability.name == 'The Wheel of Fortune' or ability.name == 'Ectoplasm' or ability.name == 'Hex' then
+        why = 'needs a Joker without an edition'
+    elseif ability.name == 'Ankh' then
+        why = #G.jokers.cards == 0 and 'needs a Joker to copy' or 'needs room for a second Joker'
+    elseif ability.name == 'Judgement' or ability.name == 'The Soul' or ability.name == 'Wraith' then
+        why = 'needs room for another Joker'
+    elseif ability.name == 'The Fool' and not (G.GAME.last_tarot_planet and G.GAME.last_tarot_planet ~= 'c_fool') then
+        why = 'needs a Tarot or Planet used before it'
+    elseif ability.name == 'The Emperor' or ability.name == 'The High Priestess' or ability.name == 'The Fool' then
+        why = 'needs room in the consumable slots'
+    elseif ability.name == 'Aura' then
+        why = 'needs 1 selected card without an edition'
+    elseif c.max_highlighted then
+        local least, most = c.min_highlighted or 1, c.mod_num or c.max_highlighted
+        why = 'needs ' .. (least == most and tostring(most) or (least .. ' to ' .. most)) .. ' selected card' .. (most == 1 and '' or 's')
+    elseif G.hand and #G.hand.cards <= 1 then
+        why = 'needs cards in hand'
+    else
+        return 'that can\'t be used right now'
+    end
+    return name .. ' ' .. why
+end
+
 -- A card's name, as Balatro shows it.
 function cards.name(center)
     if center.set == 'Booster' then

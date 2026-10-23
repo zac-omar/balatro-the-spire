@@ -587,7 +587,8 @@ local function on_buy(data, msg)
     local e = { config = { ref_table = card, id = data.use and 'buy_and_use' or 'buy_button' } }
     if area == 'cards' then
         if data.use then
-            if not card.ability.consumeable or not cards.usable(card, true) then error('that card can\'t be used now', 0) end
+            if not card.ability.consumeable then error('that card can\'t be used', 0) end
+            if not cards.usable(card, true) then error(cards.why_unusable(card), 0) end
         elseif not G.FUNCS.check_for_buy_space(card) then
             error(card.ability.consumeable and 'no room for another consumable' or 'no room for another joker', 0)
         end
@@ -622,7 +623,7 @@ local function on_use(data, msg)
     -- the consumable slots be used on it too, and StS2 shows the effect as a pack card's).
     local pack_hand = dealer.in_pack() and G.hand and #G.hand.cards > 0
     if G.STATE == G.STATES.SELECTING_HAND or pack_hand then select_in_hand(data.cards) end
-    if not cards.usable(card) then error('that can\'t be used right now', 0) end
+    if not cards.usable(card) then error(cards.why_unusable(card), 0) end
     if pack_hand then
         pack_effect = { used = {} }
         pack_effect.card = cards.card_info(card, pack_effect.used, true)
@@ -646,7 +647,7 @@ local function on_pick(data, msg)
     if not card then error('that card is gone', 0) end
     if G.hand and #G.hand.cards > 0 then select_in_hand(data.cards) end
     if card.ability.consumeable then
-        if not cards.usable(card, true) then error('that can\'t be used on those cards', 0) end
+        if not cards.usable(card, true) then error(cards.why_unusable(card), 0) end
     elseif card.ability.set == 'Joker' and not G.FUNCS.check_for_buy_space(card) then
         error('no room for another joker', 0)
     end
