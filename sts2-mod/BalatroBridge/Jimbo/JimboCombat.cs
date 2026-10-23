@@ -252,7 +252,7 @@ internal static class JimboCombat
             else if (!_saidLowHp && player.Creature.CurrentHp * 10 < player.Creature.MaxHp * 3)
             {
                 _saidLowHp = true;
-                JimboQuips.Maybe(player, JimboQuips.Moment.LowHp);
+                JimboQuips.Maybe(player, JimboQuips.Moment.LowHp, delay: 1.2); // after the turn banner
             }
         }
         catch (Exception e)
@@ -283,8 +283,10 @@ internal static class JimboCombat
         }
         // The fuse says what they gain (its label, and the OVERTIME slam on the first turn).
         TableFx.Sound(over == 1 ? "gong" : "timpani", 1f, 0.6f);
-        // A word as overtime starts, and now and then as it drags on.
-        if (over % 3 == 1) JimboQuips.Maybe(player, JimboQuips.Moment.Overtime);
+        // A word as overtime starts (once the OVERTIME slam has played), and now and then as it
+        // drags on (once the turn banner has gone).
+        if (over == 1 && Hand is JimboHand hand) hand.AfterOvertimeSlam(() => JimboQuips.Maybe(player, JimboQuips.Moment.Overtime));
+        else if (over % 3 == 1) JimboQuips.Maybe(player, JimboQuips.Moment.Overtime, delay: 1.2);
         return true;
     }
 

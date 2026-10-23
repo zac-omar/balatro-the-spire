@@ -653,6 +653,9 @@ internal sealed class JimboHand
     /// <summary>The discarded cards' chips, shown as the Block they became.</summary>
     /// <summary>The turn against the blind's hands ("Turn 2/4"), or overtime once they're spent.</summary>
     /// <summary>The turn, and how near Overtime is: the fuse over the panel burns down a notch a turn.</summary>
+    /// <summary>Runs <paramref name="then"/> once Overtime's slam has played.</summary>
+    public void AfterOvertimeSlam(Action then) => _fuse.AfterSlam(then);
+
     public void ShowTurn(int turn, int limit, int strength)
     {
         _turn.Text = limit > 0 ? $"Turn {turn}" : "";

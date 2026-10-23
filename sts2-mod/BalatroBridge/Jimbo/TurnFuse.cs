@@ -39,6 +39,7 @@ internal sealed class TurnFuse
     private Tween? _pulse;
     private int _limit = -1;
     private int _turn = -1;
+    private Action? _afterSlam;
 
     public TurnFuse(Control stage)
     {
@@ -99,6 +100,9 @@ internal sealed class TurnFuse
         _label.HorizontalAlignment = HorizontalAlignment.Left;
         _root.AddChild(_label);
     }
+
+    /// <summary>Runs <paramref name="then"/> once the OVERTIME slam has played (Jimbo's word on it waits for it).</summary>
+    public void AfterSlam(Action then) => _afterSlam = then;
 
     /// <summary>Moves the fuse under End Turn, whose middle is at <paramref name="endTurnX"/> on the stage.</summary>
     public void Under(float endTurnX) => _root.Position = new Vector2(Mathf.Clamp(endTurnX - EndTurnX, -400, 800), 0);
@@ -235,5 +239,11 @@ internal sealed class TurnFuse
         t.Chain().TweenInterval(1.0 / TableFx.Speed);
         t.Chain().TweenProperty(word, "modulate:a", 0f, 0.4 / TableFx.Speed);
         t.Chain().TweenCallback(Callable.From(word.QueueFree));
+        t.Chain().TweenCallback(Callable.From(() =>
+        {
+            Action? then = _afterSlam;
+            _afterSlam = null;
+            then?.Invoke();
+        }));
     }
 }
