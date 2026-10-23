@@ -154,10 +154,13 @@ internal sealed class JimboHand
         }
 
         _feltMaterial = new ShaderMaterial { Shader = new Shader { Code = BandShaderCode } };
+        // The felt runs edge to edge: on a screen wider than 16:9 (StS2's 21:9 setting) the stage
+        // sits in the middle, with as much screen again on either side.
+        float side = _stage.Position.X / scale + 200;
         var felt = new ColorRect
         {
-            Position = new Vector2(-200, BandTop),
-            Size = new Vector2(StageSize.X + 400, StageSize.Y - BandTop + 40),
+            Position = new Vector2(-side, BandTop),
+            Size = new Vector2(StageSize.X + 2 * side, StageSize.Y - BandTop + 40),
             Material = _feltMaterial,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -654,6 +657,12 @@ internal sealed class JimboHand
     {
         _turn.Text = limit > 0 ? $"Turn {turn}" : "";
         _turn.LabelSettings.FontColor = turn > limit && limit > 0 ? StsColors.red : new Color(StsColors.cream, 0.8f);
+        // Under StS2's End Turn button, which keeps to the screen's right edge however wide it is.
+        if (_endTurn != null && GodotObject.IsInstanceValid(_endTurn) && _endTurn.IsInsideTree())
+        {
+            Vector2 middle = _stage.GetGlobalTransformWithCanvas().AffineInverse() * (_endTurn.GetGlobalTransformWithCanvas() * (_endTurn.Size / 2));
+            _fuse.Under(middle.X);
+        }
         _fuse.Show(turn, limit, strength);
     }
 

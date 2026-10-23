@@ -19,6 +19,9 @@ namespace BalatroBridge.Jimbo;
 internal sealed class TurnFuse
 {
     private const float Left = 1626, Right = 1764, Y = 1022;
+
+    // The middle of StS2's End Turn button at 16:9, which the fuse is laid out under.
+    private const float EndTurnX = 1714;
     private static readonly Color Rope = new("D9B26F");
     private static readonly Color RopeEdge = new("3A2A18");
     private static readonly Color Burnt = new("3B3530");
@@ -96,6 +99,9 @@ internal sealed class TurnFuse
         _label.HorizontalAlignment = HorizontalAlignment.Left;
         _root.AddChild(_label);
     }
+
+    /// <summary>Moves the fuse under End Turn, whose middle is at <paramref name="endTurnX"/> on the stage.</summary>
+    public void Under(float endTurnX) => _root.Position = new Vector2(Mathf.Clamp(endTurnX - EndTurnX, -400, 800), 0);
 
     private static Line2D Line(Color colour, float width) => new()
     {
