@@ -367,7 +367,12 @@ function cards.playing_card_text(card)
         lines[#lines + 1] = '[blue]+' .. tostring(chips) .. '[/blue] chips'
     end
     if card.config.center.key ~= 'c_base' then
+        -- A debuffed card's own UI only says so: its enhancement's numbers are read with the
+        -- debuff lifted for the moment, as cards.describe does for jokers.
+        local debuff = card.debuff
+        card.debuff = false
         local vars = captured_vars(card.config.center.key, function() card:generate_UIBox_ability_table() end)
+        card.debuff = debuff
         local text = cards.text('Enhanced', card.config.center.key, vars or {})
         if text then lines[#lines + 1] = text end
     end
