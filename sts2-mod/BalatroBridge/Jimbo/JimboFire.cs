@@ -45,8 +45,9 @@ internal static class JimboFire
         // Behind him, a tall blaze from his feet; through him, a lighter glow; embers flying up.
         float width = card.Size.X * 2.1f, height = card.Size.Y * 2.3f;
         var bottom = new Vector2(card.GetCenter().X, card.End.Y + card.Size.Y * 0.08f);
-        ColorRect back = Flame.Create(new Rect2(bottom.X - width / 2, bottom.Y - height, width, height), Flame.Fire);
-        ColorRect front = Flame.Create(new Rect2(bottom.X - width * 0.35f, bottom.Y - height * 0.6f, width * 0.7f, height * 0.6f), Flame.Fire, glow: true);
+        // A body going up burns harder than a score does.
+        ColorRect back = Flame.Create(new Rect2(bottom.X - width / 2, bottom.Y - height, width, height), Flame.Fire, strength: 2.2f);
+        ColorRect front = Flame.Create(new Rect2(bottom.X - width * 0.35f, bottom.Y - height * 0.6f, width * 0.7f, height * 0.6f), Flame.Fire, glow: true, strength: 1.6f);
         front.Modulate = new Color(1, 1, 1, 0.55f);
         node.AddChild(back);
         node.MoveChild(back, 0);
