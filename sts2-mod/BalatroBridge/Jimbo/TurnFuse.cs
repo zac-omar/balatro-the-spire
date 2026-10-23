@@ -1,7 +1,11 @@
 using System;
+using System.Linq;
+using System.Threading.Tasks;
 using BalatroBridge.Table;
 using Godot;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Nodes.Combat;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
 
 namespace BalatroBridge.Jimbo;
 
@@ -157,8 +161,8 @@ internal sealed class TurnFuse
             _pulse = _cap.CreateTween().SetLoops();
             _pulse.TweenProperty(_cap, "modulate", new Color(1.4f, 1.1f, 1.1f), 0.3);
             _pulse.TweenProperty(_cap, "modulate", Colors.White, 0.3);
-            if (left == 0) GoOff();
-            else TableFx.Juice(_cap, 0.2f);
+            TableFx.Juice(_cap, 0.2f);
+            if (left == 0) TaskHelper.RunSafely(GoOffAfterBanner());
         }
     }
 
@@ -186,6 +190,25 @@ internal sealed class TurnFuse
             : TableStyle.Box(new Color("5A1E1A"), new Color("FE5F55", 0.5f), 9, 2, 4));
         _capText.LabelSettings.FontColor = lit ? Colors.White : new Color(StsColors.cream, 0.7f);
     }
+
+    // OVERTIME lands once StS2's "Player Turn" banner has gone (about two seconds), not on it.
+    private async Task GoOffAfterBanner()
+    {
+        SceneTree tree = (SceneTree)Engine.GetMainLoop();
+        ulong deadline = Time.GetTicksMsec() + 3000;
+        do
+        {
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            if (!GodotObject.IsInstanceValid(_stage) || !_stage.IsInsideTree()) return;
+        }
+        while (Time.GetTicksMsec() < deadline && Banner());
+        BridgeMod.LogInfo("jimbo: Overtime begins");
+        GoOff();
+    }
+
+    // StS2 puts its turn banner straight on the combat room.
+    private static bool Banner() =>
+        NCombatRoom.Instance is NCombatRoom room && GodotObject.IsInstanceValid(room) && room.GetChildren().Any(c => c is NPlayerTurnBanner);
 
     // The fuse reaches the end: a burst at the cap, and OVERTIME slams down over the table.
     private void GoOff()
