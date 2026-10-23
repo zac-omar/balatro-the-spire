@@ -93,7 +93,12 @@ internal static class JimboRun
         _applying = true;
         try
         {
-            if (player.Gold != (int)table.Dollars) player.Gold = (int)Math.Max(table.Dollars, -999);
+            int dollars = (int)Math.Max(table.Dollars, -999);
+            if (player.Gold != dollars)
+            {
+                RecordGold(player, dollars - player.Gold);
+                player.Gold = dollars;
+            }
             _gold = player.Gold;
             await SyncJokers(player, table);
             await SyncSingles<VoucherRelic>(player, table.Vouchers.ToHashSet());
@@ -219,6 +224,16 @@ internal static class JimboRun
         session.JimboLink(link);
         if (link.Deck == null) return; // the Dealer hasn't dealt yet
         MegaCrit.Sts2.Core.Helpers.TaskHelper.RunSafely(Resync(me, session, link));
+    }
+
+    // Balatro's money changes, in StS2's run history as its own gold commands record them for
+    // other characters: cash-outs, interest and sales as gold gained (the run summary's "Gold
+    // Gained" and its score), buys and rerolls as gold spent.
+    private static void RecordGold(Player player, int delta)
+    {
+        if (player.RunState.CurrentMapPointHistoryEntry?.GetEntry(player.NetId) is not PlayerMapPointHistoryEntry entry) return;
+        if (delta > 0) entry.GoldGained += delta;
+        else entry.GoldSpent -= delta;
     }
 
     // Something in StS2 took or gave Jimbo money (a thief, say): Balatro's dollars follow.
